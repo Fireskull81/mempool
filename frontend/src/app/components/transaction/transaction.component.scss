@@ -60,8 +60,13 @@
 	top: -1px;
 }
 
+.badge.badge-accelerated {
+  background-color: #653b9c;
+  color: white;
+}
+
 .btn-small-height {
-	line-height: 1.1;
+	line-height: 1;
 }
 
 .arrow-green {
@@ -152,6 +157,16 @@
 	@media (min-width: 768px){
 		display: inline-block;
 	}
+  @media (max-width: 425px){
+		display: flex;
+    flex-direction: column;
+	}
+}
+
+.effective-fee-rating {
+  @media (max-width: 767px){
+    margin-right: 0px !important;
+  }
 }
 
 .title {
@@ -169,7 +184,7 @@
 	}
 }
 
-.details-button, .flow-toggle {
+.details-button, .flow-toggle, .accelerator-toggle {
   margin-top: -5px;
   margin-left: 10px;
 	@media (min-width: 768px){
@@ -259,7 +274,6 @@
 .accelerate {
   display: flex !important;
   align-self: auto;
-  margin-top: 3px;
   margin-left: auto;
   background-color: #653b9c;
   @media (max-width: 849px) {
