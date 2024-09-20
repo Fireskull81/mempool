@@ -1,11 +1,13 @@
 import { Component, Input, Inject, LOCALE_ID, ChangeDetectionStrategy, OnInit, OnDestroy } from '@angular/core';
-import { EChartsOption } from 'echarts';
+import { EChartsOption } from '../../graphs/echarts';
 import { OnChanges } from '@angular/core';
 import { StorageService } from '../../services/storage.service';
 import { download, formatterXAxis, formatterXAxisLabel } from '../../shared/graphs.utils';
 import { formatNumber } from '@angular/common';
 import { StateService } from '../../services/state.service';
 import { Subscription } from 'rxjs';
+
+const OUTLIERS_MEDIAN_MULTIPLIER = 4;
 
 @Component({
   selector: 'app-incoming-transactions-graph',
@@ -15,7 +17,7 @@ import { Subscription } from 'rxjs';
       position: absolute;
       top: 50%;
       left: calc(50% - 16px);
-      z-index: 100;
+      z-index: 99;
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -29,8 +31,9 @@ export class IncomingTransactionsGraphComponent implements OnInit, OnChanges, On
   @Input() left: number | string = '0';
   @Input() template: ('widget' | 'advanced') = 'widget';
   @Input() windowPreferenceOverride: string;
+  @Input() outlierCappingEnabled: boolean = false;
+  @Input() isLoading: boolean;
 
-  isLoading = true;
   mempoolStatsChartOption: EChartsOption = {};
   mempoolStatsChartInitOption = {
     renderer: 'svg'
@@ -40,16 +43,15 @@ export class IncomingTransactionsGraphComponent implements OnInit, OnChanges, On
   MA: number[][] = [];
   weightMode: boolean = false;
   rateUnitSub: Subscription;
+  medianVbytesPerSecond: number | undefined;
 
   constructor(
     @Inject(LOCALE_ID) private locale: string,
     private storageService: StorageService,
-    private stateService: StateService,
+    public stateService: StateService,
   ) { }
 
   ngOnInit() {
-    this.isLoading = true;
-
     this.rateUnitSub = this.stateService.rateUnits$.subscribe(rateUnits => {
       this.weightMode = rateUnits === 'wu';
       if (this.data) {
@@ -62,45 +64,53 @@ export class IncomingTransactionsGraphComponent implements OnInit, OnChanges, On
     if (!this.data) {
       return;
     }
-    this.windowPreference = this.windowPreferenceOverride ? this.windowPreferenceOverride : this.storageService.getValue('graphWindowPreference');
-    this.MA = this.calculateMA(this.data.series[0]);
+    this.windowPreference = (this.windowPreferenceOverride ? this.windowPreferenceOverride : this.storageService.getValue('graphWindowPreference')) || '2h';
+    const windowSize = Math.max(10, Math.floor(this.data.series[0].length / 8));
+    this.MA = this.calculateMA(this.data.series[0], windowSize);
+    if (this.outlierCappingEnabled === true) {
+      this.computeMedianVbytesPerSecond(this.data.series[0]);
+    }
     this.mountChart();
   }
 
   rendered() {
     if (!this.data) {
-      return;
+      return; 
     }
-    this.isLoading = false;
   }
 
-  /// calculate the moving average of maData
-  calculateMA(maData): number[][] {
+  /**
+   * Calculate the median value of the vbytes per second chart to hide outliers
+   */
+  computeMedianVbytesPerSecond(data: number[][]): void {
+    const vBytes: number[] = [];
+    for (const value of data) {
+      vBytes.push(value[1]);
+    }
+    const sorted = vBytes.slice().sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    this.medianVbytesPerSecond = sorted[middle];
+    if (sorted.length % 2 === 0) {
+      this.medianVbytesPerSecond = (sorted[middle - 1] + sorted[middle]) / 2;
+    }
+  }
+
+  /// calculate the moving average of the provided data based on windowSize
+  calculateMA(data: number[][], windowSize: number = 100): number[][] {
     //update const variables that are not changed
     const ma: number[][] = [];
     let sum = 0;
     let i = 0;
-    const len = maData.length;
-
-    //Adjust window length based on the length of the data
-    //5% appeared as a good amount from tests
-    //TODO: make this a text box in the UI
-    const maWindowLen = Math.ceil(len * 0.05);
-
-    //calculate the center of the moving average window
-    const center = Math.floor(maWindowLen / 2);
 
     //calculate the centered moving average
-    for (i = center; i < len - center; i++) {
-      sum = 0;
-      //build out ma as we loop through the data
-      ma[i] = [];
-      ma[i].push(maData[i][0]);
-      for (let j = i - center; j <= i + center; j++) {
-        sum += maData[j][1];
+    for (i = 0; i < data.length; i++) {
+      sum += data[i][1];
+      if (i >= windowSize) {
+        sum -= data[i - windowSize][1];
+        const midpoint = i - Math.floor(windowSize / 2);
+        const avg = sum / windowSize;
+        ma.push([data[midpoint][0], avg]);
       }
-
-      ma[i].push(sum / maWindowLen);
     }
 
     //return the moving average array
@@ -138,36 +148,22 @@ export class IncomingTransactionsGraphComponent implements OnInit, OnChanges, On
           }
         }],
       }
-    },
-    {
-      zlevel: 0,
-      name: 'MA',
-      data: this.MA,
-      type: 'line',
-      smooth: false,
-      showSymbol: false,
-      symbol: 'none',
-      lineStyle: {
-        width: 1,
-        color: "white",
-      },
-      markLine: {
-        silent: true,
+    });
+    if (this.template !== 'widget') {
+      seriesGraph.push({
+        zlevel: 0,
+        name: 'MA',
+        data: this.MA,
+        type: 'line',
+        smooth: false,
+        showSymbol: false,
         symbol: 'none',
         lineStyle: {
-          color: '#fff',
-          opacity: 1,
           width: 2,
-        },
-        data: [{
-          yAxis: 1667,
-          label: {
-            show: false,
-            color: '#ffffff',
-          }
-        }],
-      }
-    });
+          color: "white",
+        }
+      });
+    }
 
     this.mempoolStatsChartOption = {
       grid: {
@@ -210,31 +206,28 @@ export class IncomingTransactionsGraphComponent implements OnInit, OnChanges, On
           obj[['left', 'right'][+(pos[0] < size.viewSize[0] / 2)]] = 80;
           return obj;
         },
-        extraCssText: `width: ${(['2h', '24h'].includes(this.windowPreference) || this.template === 'widget') ? '125px' : '135px'};
-                      background: transparent;
+        extraCssText: `background: transparent;
                       border: none;
                       box-shadow: none;`,
         axisPointer: {
           type: 'line',
         },
         formatter: (params: any) => {
-          const axisValueLabel: string = formatterXAxis(this.locale, this.windowPreference, params[0].axisValue);
+          const bestItem = params.reduce((best, item) => {
+            return (item.seriesName === 'data' && (!best || best.value[1] < item.value[1])) ? item : best;
+          }, null);
+          const axisValueLabel: string = formatterXAxis(this.locale, this.windowPreference, bestItem.axisValue);
           const colorSpan = (color: string) => `<span class="indicator" style="background-color: ` + color + `"></span>`;
           let itemFormatted = '<div class="title">' + axisValueLabel + '</div>';
-          params.map((item: any, index: number) => {
-
-            //Do no include MA in tooltip legend!
-            if (item.seriesName !== 'MA') {
-              if (index < 26) {
-                itemFormatted += `<div class="item">
-                  <div class="indicator-container">${colorSpan(item.color)}</div>
+          if (bestItem) {
+            itemFormatted += `<div class="item">
+                  <div class="indicator-container">${colorSpan(bestItem.color)}</div>
                   <div class="grow"></div>
-                  <div class="value">${formatNumber(item.value[1], this.locale, '1.0-0')}<span class="symbol">vB/s</span></div>
+                  <div class="value">${formatNumber(bestItem.value[1], this.locale, '1.0-0')} <span class="symbol">vB/s</span></div>
                 </div>`;
-              }
-            }
-          });
-          return `<div class="tx-wrapper-tooltip-chart ${(this.template === 'advanced') ? 'tx-wrapper-tooltip-chart-advanced' : ''}">${itemFormatted}</div>`;
+          }
+          return `<div class="tx-wrapper-tooltip-chart ${(this.template === 'advanced') ? 'tx-wrapper-tooltip-chart-advanced' : ''}" 
+                  style="width: ${(this.windowPreference === '2h' || this.template === 'widget') ? '125px' : '215px'}">${itemFormatted}</div>`;
         }
       },
       xAxis: [
@@ -256,17 +249,25 @@ export class IncomingTransactionsGraphComponent implements OnInit, OnChanges, On
         }
       ],
       yAxis: {
+        max: (value): number => {
+          let cappedMax = value.max;
+          if (this.outlierCappingEnabled && value.max >= (this.medianVbytesPerSecond * OUTLIERS_MEDIAN_MULTIPLIER)) {
+            cappedMax = Math.round(this.medianVbytesPerSecond * OUTLIERS_MEDIAN_MULTIPLIER);
+          }
+          // always show the clearing rate line, plus a small margin
+          return Math.max(1800, cappedMax);
+        },
         type: 'value',
         axisLabel: {
           fontSize: 11,
-          formatter: (value) => {
-            return this.weightMode ? value * 4 : value;
+          formatter: (value): string => {
+            return this.weightMode ? (value * 4).toString() : value.toString();
           }
         },
         splitLine: {
           lineStyle: {
             type: 'dotted',
-            color: '#ffffff66',
+            color: 'var(--transparent-fg)',
             opacity: 0.25,
           }
         }
@@ -326,7 +327,7 @@ export class IncomingTransactionsGraphComponent implements OnInit, OnChanges, On
     const now = new Date();
     // @ts-ignore
     this.mempoolStatsChartOption.grid.height = prevHeight + 20;
-    this.mempoolStatsChartOption.backgroundColor = '#11131f';
+    this.mempoolStatsChartOption.backgroundColor = 'var(--active-bg)';
     this.chartInstance.setOption(this.mempoolStatsChartOption);
     download(this.chartInstance.getDataURL({
       pixelRatio: 2,

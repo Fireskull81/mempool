@@ -29,18 +29,34 @@ export interface PoolStats extends PoolInfo {
 }
 
 export interface BlockAudit {
+  version: number,
   time: number,
   height: number,
   hash: string,
+  unseenTxs: string[],
   missingTxs: string[],
   freshTxs: string[],
   sigopTxs: string[],
   fullrbfTxs: string[],
   addedTxs: string[],
+  prioritizedTxs: string[],
   acceleratedTxs: string[],
   matchRate: number,
   expectedFees?: number,
   expectedWeight?: number,
+  template?: any[];
+}
+
+export interface TransactionAudit {
+  seen?: boolean;
+  expected?: boolean;
+  added?: boolean;
+  prioritized?: boolean;
+  delayed?: number;
+  accelerated?: boolean;
+  conflict?: boolean;
+  coinbase?: boolean;
+  firstSeen?: number;
 }
 
 export interface AuditScore {
@@ -61,13 +77,29 @@ export interface MempoolBlock {
 
 export interface MempoolBlockWithTransactions extends MempoolBlock {
   transactionIds: string[];
-  transactions: TransactionStripped[];
+  transactions: TransactionClassified[];
 }
 
 export interface MempoolBlockDelta {
-  added: TransactionStripped[];
+  added: TransactionCompressed[];
   removed: string[];
-  changed: { txid: string, rate: number | undefined }[];
+  changed: MempoolDeltaChange[];
+}
+
+export interface MempoolDeltaTxids {
+  sequence: number,
+  added: string[];
+  removed: string[];
+  mined: string[];
+  replaced: { replaced: string, by: string }[];
+}
+
+export interface MempoolDelta {
+  sequence: number,
+  added: MempoolTransactionExtended[];
+  removed: string[];
+  mined: string[];
+  replaced: { replaced: string, by: TransactionExtended }[];
 }
 
 interface VinStrippedToScriptsig {
@@ -94,7 +126,12 @@ export interface TransactionExtended extends IEsploraApi.Transaction {
     vsize: number,
   };
   acceleration?: boolean;
+  acceleratedBy?: number[];
+  acceleratedAt?: number;
+  feeDelta?: number;
+  replacement?: boolean;
   uid?: number;
+  flags?: number;
 }
 
 export interface MempoolTransactionExtended extends TransactionExtended {
@@ -105,6 +142,7 @@ export interface MempoolTransactionExtended extends TransactionExtended {
   inputs?: number[];
   lastBoosted?: number;
   cpfpDirty?: boolean;
+  cpfpUpdated?: number;
 }
 
 export interface AuditTransaction {
@@ -139,6 +177,12 @@ export interface CompactThreadTransaction {
   cpfpRoot?: number;
   cpfpChecked?: boolean;
   dirty?: boolean;
+}
+
+export interface GbtCandidates {
+  txs: { [txid: string ]: boolean },
+  added: MempoolTransactionExtended[];
+  removed: MempoolTransactionExtended[];
 }
 
 export interface ThreadTransaction {
@@ -179,6 +223,10 @@ export interface CpfpInfo {
   bestDescendant?: BestDescendant | null;
   descendants?: Ancestor[];
   effectiveFeePerVsize?: number;
+  sigops?: number;
+  adjustedVsize?: number,
+  acceleration?: boolean,
+  fee?: number;
 }
 
 export interface TransactionStripped {
@@ -188,7 +236,55 @@ export interface TransactionStripped {
   value: number;
   acc?: boolean;
   rate?: number; // effective fee rate
+  time?: number;
 }
+
+export interface TransactionClassified extends TransactionStripped {
+  flags: number;
+}
+
+// [txid, fee, vsize, value, rate, flags, acceleration?]
+export type TransactionCompressed = [string, number, number, number, number, number, number, 1?];
+// [txid, rate, flags, acceleration?]
+export type MempoolDeltaChange = [string, number, number, (1|0)];
+
+// binary flags for transaction classification
+export const TransactionFlags = {
+  // features
+  rbf:                                                         0b00000001n,
+  no_rbf:                                                      0b00000010n,
+  v1:                                                          0b00000100n,
+  v2:                                                          0b00001000n,
+  v3:                                                          0b00010000n,
+  nonstandard:                                                 0b00100000n,
+  // address types
+  p2pk:                                               0b00000001_00000000n,
+  p2ms:                                               0b00000010_00000000n,
+  p2pkh:                                              0b00000100_00000000n,
+  p2sh:                                               0b00001000_00000000n,
+  p2wpkh:                                             0b00010000_00000000n,
+  p2wsh:                                              0b00100000_00000000n,
+  p2tr:                                               0b01000000_00000000n,
+  // behavior
+  cpfp_parent:                               0b00000001_00000000_00000000n,
+  cpfp_child:                                0b00000010_00000000_00000000n,
+  replacement:                               0b00000100_00000000_00000000n,
+  // data
+  op_return:                        0b00000001_00000000_00000000_00000000n,
+  fake_pubkey:                      0b00000010_00000000_00000000_00000000n,
+  inscription:                      0b00000100_00000000_00000000_00000000n,
+  fake_scripthash:                  0b00001000_00000000_00000000_00000000n,
+  // heuristics
+  coinjoin:                0b00000001_00000000_00000000_00000000_00000000n,
+  consolidation:           0b00000010_00000000_00000000_00000000_00000000n,
+  batch_payout:            0b00000100_00000000_00000000_00000000_00000000n,
+  // sighash
+  sighash_all:    0b00000001_00000000_00000000_00000000_00000000_00000000n,
+  sighash_none:   0b00000010_00000000_00000000_00000000_00000000_00000000n,
+  sighash_single: 0b00000100_00000000_00000000_00000000_00000000_00000000n,
+  sighash_default:0b00001000_00000000_00000000_00000000_00000000_00000000n,
+  sighash_acp:    0b00010000_00000000_00000000_00000000_00000000_00000000n,
+};
 
 export interface BlockExtension {
   totalFees: number;
@@ -209,6 +305,7 @@ export interface BlockExtension {
   coinbaseRaw: string;
   orphans: OrphanedBlock[] | null;
   coinbaseAddress: string | null;
+  coinbaseAddresses: string[] | null;
   coinbaseSignature: string | null;
   coinbaseSignatureAscii: string | null;
   virtualSize: number;
@@ -239,7 +336,8 @@ export interface BlockExtended extends IEsploraApi.Block {
 
 export interface BlockSummary {
   id: string;
-  transactions: TransactionStripped[];
+  transactions: TransactionClassified[];
+  version?: number;
 }
 
 export interface AuditSummary extends BlockAudit {
@@ -247,8 +345,8 @@ export interface AuditSummary extends BlockAudit {
   size?: number,
   weight?: number,
   tx_count?: number,
-  transactions: TransactionStripped[];
-  template?: TransactionStripped[];
+  transactions: TransactionClassified[];
+  template?: TransactionClassified[];
 }
 
 export interface BlockPrice {
@@ -287,8 +385,9 @@ export interface CpfpCluster {
 }
 
 export interface CpfpSummary {
-  transactions: TransactionExtended[];
+  transactions: MempoolTransactionExtended[];
   clusters: CpfpCluster[];
+  version: number;
 }
 
 export interface Statistic {
@@ -344,11 +443,31 @@ export interface Statistic {
 
 export interface OptimizedStatistic {
   added: string;
+  count: number;
   vbytes_per_second: number;
   total_fee: number;
   mempool_byte_weight: number;
   min_fee: number;
   vsizes: number[];
+}
+
+export interface TxTrackingInfo {
+  replacedBy?: string,
+  position?: { block: number, vsize: number, accelerated?: boolean, acceleratedBy?: number[], acceleratedAt?: number, feeDelta?: number },
+  cpfp?: {
+    ancestors?: Ancestor[],
+    bestDescendant?: Ancestor | null,
+    descendants?: Ancestor[] | null,
+    effectiveFeePerVsize?: number | null,
+    sigops: number,
+    adjustedVsize: number,
+  },
+  utxoSpent?: { [vout: number]: { vin: number, txid: string } },
+  accelerated?: boolean,
+  acceleratedBy?: number[],
+  acceleratedAt?: number,
+  feeDelta?: number,
+  confirmed?: boolean
 }
 
 export interface WebsocketResponse {
@@ -357,7 +476,6 @@ export interface WebsocketResponse {
   'track-tx': string;
   'track-address': string;
   'watch-mempool': boolean;
-  'track-bisq-market': string;
 }
 
 export interface VbytesPerSecond {
@@ -379,6 +497,7 @@ export interface IBackendInfo {
   gitCommit: string;
   version: string;
   lightning: boolean;
+  backend: 'esplora' | 'electrum' | 'none';
 }
 
 export interface IDifficultyAdjustment {

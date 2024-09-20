@@ -67,40 +67,6 @@ if (configContent && configContent.BASE_MODULE === 'liquid') {
   ]);
 }
 
-
-if (configContent && configContent.BASE_MODULE === 'bisq') {
-  PROXY_CONFIG.push(...[
-    {
-      context: ['/bisq/api/v1/ws'],
-      target: `http://127.0.0.1:8999`,
-      secure: false,
-      ws: true,
-      changeOrigin: true,
-      proxyTimeout: 30000,
-      pathRewrite: {
-          "^/bisq": ""
-      },
-    },
-    {
-      context: ['/bisq/api/v1/**'],
-      target: `http://127.0.0.1:8999`,
-      secure: false,
-      changeOrigin: true,
-      proxyTimeout: 30000,
-    },
-    {
-      context: ['/bisq/api/**'],
-      target: `http://127.0.0.1:8999`,
-      secure: false,
-      changeOrigin: true,
-      proxyTimeout: 30000,
-      pathRewrite: {
-          "^/bisq/api/": "/api/v1/bisq/"
-      },
-    }
-  ]);
-}
-
 PROXY_CONFIG.push(...[
   {
     context: ['/testnet/api/v1/lightning/**'],
@@ -112,6 +78,18 @@ PROXY_CONFIG.push(...[
         "^/testnet": ""
     },
   },
+  /* Optional proxy to route dev to official acceleration services
+  {
+    context: ['/api/v1/services/accelerator/**'],
+    target: `https://mempool.space/api/v1/services/accelerator/`,
+    secure: false,
+    changeOrigin: true,
+    proxyTimeout: 30000,
+    pathRewrite: {
+      "^/api/v1/services/accelerator": ""
+    },
+  },
+  */
   {
     context: ['/api/v1/services/**'],
     target: `http://localhost:9000`,

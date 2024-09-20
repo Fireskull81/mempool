@@ -60,16 +60,21 @@
 	top: -1px;
 }
 
+.badge.badge-accelerated {
+  background-color: var(--tertiary);
+  color: white;
+}
+
 .btn-small-height {
-	line-height: 1.1;
+	line-height: 1;
 }
 
 .arrow-green {
-	color: #1a9436;
+	color: var(--success);
 }
 
 .arrow-red {
-	color: #dc3545;
+	color: var(--red);
 }
 
 .container-xl {
@@ -95,7 +100,7 @@
 .graph-container {
   position: relative;
   width: 100%;
-  background: #181b2d;
+  background: var(--stat-box-bg);
   padding: 10px 0;
   padding-bottom: 0;
 }
@@ -144,6 +149,10 @@
 		.btn {
 			display: block;
 		}
+
+    &.wrap-cell {
+      white-space: normal;
+    }
 	}
 }
 
@@ -152,13 +161,29 @@
 	@media (min-width: 768px){
 		display: inline-block;
 	}
+  @media (max-width: 425px){
+		display: flex;
+    flex-direction: column;
+	}
+}
+
+@media (max-width: 767px){
+  .hide-on-mobile {
+    display: none;
+  }
+}
+
+.effective-fee-rating {
+  @media (max-width: 767px){
+    margin-right: 0px !important;
+  }
 }
 
 .title {
   h2 {
     line-height: 1;
     margin: 0;
-    padding-bottom: 10px;
+    padding-bottom: 5px;
   }
 }
 
@@ -169,7 +194,7 @@
 	}
 }
 
-.details-button, .flow-toggle {
+.details-button, .flow-toggle, .accelerator-toggle {
   margin-top: -5px;
   margin-left: 10px;
 	@media (min-width: 768px){
@@ -177,6 +202,11 @@
     margin-top: 0px;
     margin-bottom: 0px;
 	}
+}
+
+.accelerator-toggle, .details-button {
+  position: relative;
+  bottom: -13px;
 }
 
 .subtitle-block {
@@ -218,8 +248,33 @@
   }
 }
 
-.link.accelerator {
-  cursor: pointer;
+.alert-purple {
+  background-color: #5c3a88;
+  width: 100%;
+}
+
+// Blinking block
+@keyframes shadowyBackground {
+  0% {
+    box-shadow: 0px 0px 20px rgba(#eba814, 1);
+  }
+  50% {
+    box-shadow: 0px 0px 20px rgba(#eba814, .3);
+  }
+  100% {
+    box-shadow: 0px 0px 20px rgba(#ffae00, 1);
+  }
+}
+
+.blink-bg {
+  color: var(--fg);
+  background: repeating-linear-gradient(#daad0a 0%, #daad0a 5%, #987805 100%) !important;
+  animation: shadowyBackground 1s infinite;
+  box-shadow: 0px 0px 20px rgba(#eba814, 1);
+  transition: 100ms all ease-in;
+  margin-right: 8px;
+  font-size: 16px;
+  border: 1px solid gold;
 }
 
 .eta {
@@ -232,38 +287,41 @@
 }
 
 .accelerate {
-  display: flex !important;
-  align-self: auto;
-  margin-top: 3px;
-  margin-left: auto;
-  background-color: #653b9c;
-  @media (max-width: 849px) {
-    margin-left: 5px;
-  }
+  @media (min-width: 850px) {
+    margin-left: auto;
+  }  
 }
 
 .etaDeepMempool {
-  display: flex !important;
-  justify-content: end;
   flex-wrap: wrap;
-  align-content: center;
-  @media (max-width: 995px) {
-    justify-content: left !important;
-  }
   @media (max-width: 849px) {
     justify-content: right !important;
   }
 }
 
 .accelerateDeepMempool {
-  align-self: auto;
-  margin-top: 3px;
-  margin-left: auto;
-  background-color: #653b9c;
-  @media (max-width: 995px) {
-    margin-left: 0px;
-  }
-  @media (max-width: 849px) {
-    margin-left: 5px;
-  }
+  background-color: var(--tertiary);
+  margin-left: 5px;
+}
+
+.goggles-icon {
+  display: block;
+  width: 2.7em;
+}
+
+.pool-logo {
+  width: 15px;
+  height: 15px;
+  position: relative;
+  top: -1px;
+  margin-right: 2px;
+}
+
+.oobFees {
+  color: #905cf4;
+}
+
+.disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }

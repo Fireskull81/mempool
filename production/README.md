@@ -2,11 +2,13 @@
 
 These instructions are for setting up a serious production Mempool website for Bitcoin (mainnet, testnet, signet), Liquid (mainnet, testnet), and Bisq.
 
-Again, this setup is no joke—home users should use [one of the other installation methods](../#installation-methods). Support is only provided to [enterprise sponsors](https://mempool.space/enterprise).
+Again, this setup is no joke—home users should use [one of the other installation methods](../#installation-methods). Support is only provided to project sponsors through [Mempool Enterprise®](https://mempool.space/enterprise).
+
+You can also have the mempool.space team run a highly-performant and highly-available instance of Mempool for you on their own global ISP infrastructure. See <a href="https://mempool.space/enterprise" target="_blank">Mempool Enterprise®</a> for more details.
 
 ### Server Hardware
 
-Mempool v2 is powered by [blockstream/electrs](https://github.com/Blockstream/electrs), which is a beast. 
+Mempool v3 is powered by [mempool/electrs](https://github.com/mempool/electrs), which is a beast. 
 
 I recommend a beefy server:
 
@@ -82,11 +84,11 @@ pkg install -y zsh sudo git screen curl wget neovim rsync nginx openssl openssh-
 
 ### Node.js + npm
 
-Build Node.js v16.16.0 and npm v8 from source using `nvm`:
+Build Node.js v20.17.0 and npm v9 from source using `nvm`:
 ```
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | zsh
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | zsh
 source $HOME/.zshrc
-nvm install v16.16.0 --shared-zlib
+nvm install v20.17.0 --shared-zlib
 nvm alias default node
 ```
 

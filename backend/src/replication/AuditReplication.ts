@@ -31,11 +31,11 @@ class AuditReplication {
     const missingAudits = await this.$getMissingAuditBlocks();
 
     logger.debug(`Fetching missing audit data for ${missingAudits.length} blocks from trusted servers`, 'Replication');
-    
+
     let totalSynced = 0;
     let totalMissed = 0;
     let loggerTimer = Date.now();
-    // process missing audits in batches of 
+    // process missing audits in batches of BATCH_SIZE
     for (let i = 0; i < missingAudits.length; i += BATCH_SIZE) {
       const slice = missingAudits.slice(i, i + BATCH_SIZE);
       const results = await Promise.all(slice.map(hash => this.$syncAudit(hash)));
@@ -105,14 +105,18 @@ class AuditReplication {
       template: {
         id: blockHash,
         transactions: auditSummary.template || []
-      }
+      },
+      version: 1,
     });
     await blocksAuditsRepository.$saveAudit({
+      version: auditSummary.version || 0,
       hash: blockHash,
       height: auditSummary.height,
       time: auditSummary.timestamp || auditSummary.time,
+      unseenTxs: auditSummary.unseenTxs || [],
       missingTxs: auditSummary.missingTxs || [],
       addedTxs: auditSummary.addedTxs || [],
+      prioritizedTxs: auditSummary.prioritizedTxs || [],
       freshTxs: auditSummary.freshTxs || [],
       sigopTxs: auditSummary.sigopTxs || [],
       fullrbfTxs: auditSummary.fullrbfTxs || [],

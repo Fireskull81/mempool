@@ -33,7 +33,6 @@
   min-height: 400px;
   margin-top: 25px;
   margin-bottom: 25px;
-  min-height: 100%;
 }
 .full-container.widget {
   height: 250px;
@@ -103,7 +102,7 @@
   position: absolute;
   top: 50%;
   left: calc(50% - 15px);
-  z-index: 100;
+  z-index: 99;
   @media (max-width: 767.98px) {
     top: 550px;
   }
@@ -111,7 +110,7 @@
 .loading-spinner.widget {
   position: absolute;
   top: 200px;
-  z-index: 100;
+  z-index: 99;
   width: 100%;
   left: 0;
   @media (max-width: 767.98px) {
@@ -121,7 +120,7 @@
 .loading-spinner.nodepage {
   position: absolute;
   top: 200px;
-  z-index: 100;
+  z-index: 99;
   width: 100%;
   left: 0;
 }
@@ -129,7 +128,7 @@
 .loading-spinner.channelpage {
   position: absolute;
   top: 400px;
-  z-index: 100;
+  z-index: 99;
   width: 100%;
   left: 0;
   @media (max-width: 767.98px) {
@@ -142,4 +141,56 @@
   width: 100%;
   text-align: center;
   margin-top: 100px;
+}
+
+.full-container-graph {
+  display: flex;
+  flex-direction: column;
+  padding: 0px 15px;
+  width: 100%;
+  height: calc(100vh - 225px);
+  min-height: 400px;
+  @media (min-width: 992px) {
+    height: calc(100vh - 150px);
+  }
+}
+.full-container-graph.widget {
+  min-height: 240px;
+  height: 240px;
+  padding: 0px;
+}
+.full-container-graph.fit-container {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  min-height: 100px;
+
+  .chart {
+    padding: 0;
+    min-height: 100px;
+  }
+}
+
+.chart-graph {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  padding-top: 30px;
+  padding-bottom: 20px;
+  padding-right: 10px;
+  @media (max-width: 992px) {
+    padding-bottom: 25px;
+  }
+  @media (max-width: 829px) {
+    padding-bottom: 50px;
+  }
+  @media (max-width: 767px) {
+    padding-bottom: 25px;
+  }
+  @media (max-width: 629px) {
+    padding-bottom: 55px;
+  }
+  @media (max-width: 567px) {
+    padding-bottom: 55px;
+  }
 }

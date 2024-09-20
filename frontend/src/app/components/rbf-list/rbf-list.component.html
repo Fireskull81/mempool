@@ -6,18 +6,16 @@
     <form class="formRadioGroup">
       <div class="btn-group btn-group-toggle" name="radioBasic">
         <label class="btn btn-primary btn-sm" [class.active]="!fullRbf">
-          <input type="radio" [value]="'All'" fragment="" [routerLink]="[]"> All
-        </label>
+          <input type="radio" [value]="'All'" fragment="" [routerLink]="[]"><span i18n="all">All</span></label>
         <label class="btn btn-primary btn-sm" [class.active]="fullRbf">
-          <input type="radio" [value]="'Full RBF'" fragment="fullrbf" [routerLink]="[]"> Full RBF
-        </label>
+          <input type="radio" [value]="'Full RBF'" fragment="fullrbf" [routerLink]="[]" i18n="transaction.full-rbf">Full RBF</label>
       </div>
     </form>
   </div>
 
   <div class="clearfix"></div>
 
-  <div class="rbf-trees" style="min-height: 295px">
+  <div class="rbf-trees" [ngStyle]="{ 'min-height': '295px', 'opacity': isLoading ? '0.75' : '1' }">
     <ng-container *ngIf="rbfTrees$ | async as trees">
       <div *ngFor="let tree of trees" class="tree">
         <p class="info">
@@ -25,7 +23,7 @@
             <span *ngIf="tree.mined" class="badge badge-success" i18n="transaction.rbf.mined">Mined</span>
             <span *ngIf="tree.fullRbf" class="badge badge-info" i18n="transaction.full-rbf">Full RBF</span>
           </span>
-          <app-time kind="since" [time]="tree.time"></app-time>
+          <app-time kind="since" [time]="tree.time" [showTooltip]="true"></app-time>
         </p>
         <div class="timeline-wrapper" [class.mined]="tree.mined">
           <app-rbf-timeline [replacements]="tree"></app-rbf-timeline>
@@ -33,7 +31,7 @@
       </div>
 
       <div class="no-replacements" *ngIf="!trees?.length">
-        <p i18n="rbf.no-replacements-yet">there are no replacements in the mempool yet!</p>
+        <p i18n="rbf.no-replacements-yet">There are no replacements in the mempool yet!</p>
       </div>
     </ng-container>
   </div>
