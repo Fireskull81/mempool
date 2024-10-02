@@ -40,7 +40,7 @@
     </div>  
     <form [formGroup]="radioGroupForm" class="formRadioGroup"
       *ngIf="!widget && (miningStatsObservable$ | async) as stats">
-      <div class="btn-group btn-group-toggle" name="radioBasic" [class]="{'disabled': isLoading}">
+      <div class="btn-group btn-group-toggle" name="radioBasic">
         <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 144" [class.active]="radioGroupForm.get('dateSpan').value === '24h'">
           <input type="radio" [value]="'24h'" fragment="24h" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'24h'" formControlName="dateSpan"> 24h
         </label>
@@ -76,15 +76,15 @@
   </div>
 
   <div [class]="!widget ? '' : 'pb-0'" class="container pb-lg-0">
-    <div [class]="widget ? 'chart-widget' : 'chart'" echarts [initOpts]="chartInitOptions" [options]="chartOptions"
+    <div [class]="widget ? 'chart-widget' : 'chart'" *browserOnly [style]="{ height: widget ? (height + 'px') : null, opacity: isLoading ? 0.5 : 1 }" echarts [initOpts]="chartInitOptions" [options]="chartOptions"
       (chartInit)="onChartInit($event)">
     </div>
 
-    <div class="text-center loadingGraphs" *ngIf="isLoading">
+    <div class="text-center loadingGraphs" *ngIf="!stateService.isBrowser || isLoading">
       <div class="spinner-border text-light"></div>
     </div>
 
-    <table *ngIf="widget === false" class="table table-borderless text-center pools-table">
+    <table *ngIf="widget === false" class="table table-borderless text-center pools-table" [style]="{opacity: isLoading ? 0.5 : 1}">
       <thead>
         <tr>
           <th class="d-none d-md-table-cell" i18n="mining.rank">Rank</th>
@@ -92,7 +92,7 @@
           <th class="" i18n="mining.pool-name">Pool</th>
           <th class="" *ngIf="this.miningWindowPreference === '24h'" i18n="mining.hashrate">Hashrate</th>
           <th class="" i18n="master-page.blocks">Blocks</th>
-          <th *ngIf="auditAvailable" class="health text-right widget" i18n="latest-blocks.avg_health"
+          <th *ngIf="auditAvailable" class="health text-right widget" [ngClass]="{'health-column': this.miningWindowPreference === '24h'}" i18n="latest-blocks.avg_health"
             i18n-ngbTooltip="latest-blocks.avg_health" ngbTooltip="Avg Health" placement="bottom" #health [disableTooltip]="!isEllipsisActive(health)">Avg Health</th>
           <th *ngIf="auditAvailable" class="d-none d-sm-table-cell" i18n="mining.fees-per-block">Avg Block Fees</th>
           <th class="d-none d-lg-table-cell" i18n="mining.empty-blocks">Empty Blocks</th>
@@ -102,15 +102,15 @@
         <tr *ngFor="let pool of miningStats.pools">
           <td class="d-none d-md-table-cell">{{ pool.rank }}</td>
           <td class="text-right">
-            <img width="25" height="25" src="{{ pool.logo }}" [alt]="pool.name + ' mining pool logo'" onError="this.src = '/resources/mining-pools/default.svg'">
+            <img width="25" height="25" src="{{ pool.logo }}" [alt]="pool.name + ' mining pool logo'" onError="this.onerror=null; this.src = '/resources/mining-pools/default.svg'">
           </td>
-          <td class=""><a [routerLink]="[('/mining/pool/' + pool.slug) | relativeUrl]">{{ pool.name }}</a></td>
-          <td class="" *ngIf="this.miningWindowPreference === '24h'">{{ pool.lastEstimatedHashrate }} {{
+          <td class="pool-name"><a [routerLink]="[('/mining/pool/' + pool.slug) | relativeUrl]">{{ pool.name }}</a></td>
+          <td class="" *ngIf="this.miningWindowPreference === '24h'">{{ pool.lastEstimatedHashrate | number: '1.2-2' }} {{
             miningStats.miningUnits.hashrateUnit }}</td>
           <td class="d-flex justify-content-center">
             {{ pool.blockCount }}<span class="d-none d-md-table-cell">&nbsp;({{ pool.share }}%)</span>
           </td>
-          <td *ngIf="auditAvailable" class="health text-right" [ngClass]="{'widget': widget, 'legacy': !indexingAvailable}">
+          <td *ngIf="auditAvailable" class="health text-right" [ngClass]="{'widget': widget, 'legacy': !indexingAvailable, 'health-column': this.miningWindowPreference === '24h'}">
             <a
               class="health-badge badge"
               [class.badge-success]="pool.avgMatchRate >= 99"
@@ -136,7 +136,7 @@
           <td class="d-none d-md-table-cell"></td>
           <td class="text-right"></td>
           <td class=""><b i18n="mining.all-miners">All miners</b></td>
-          <td class="" *ngIf="this.miningWindowPreference === '24h'"><b>{{ miningStats.lastEstimatedHashrate}} {{
+          <td class="" *ngIf="this.miningWindowPreference === '24h'"><b>{{ miningStats.lastEstimatedHashrate | number: '1.2-2' }} {{
               miningStats.miningUnits.hashrateUnit }}</b></td>
           <td class=""><b>{{ miningStats.blockCount }}</b></td>
           <td *ngIf="auditAvailable"></td>

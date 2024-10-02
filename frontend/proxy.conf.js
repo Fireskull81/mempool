@@ -22,10 +22,9 @@ PROXY_CONFIG = [
     {
         context: ['*',
         '/api/**', '!/api/v1/ws',
-        '!/bisq', '!/bisq/**', '!/bisq/',
         '!/liquid', '!/liquid/**', '!/liquid/',
         '!/liquidtestnet', '!/liquidtestnet/**', '!/liquidtestnet/',
-        '/testnet/api/**', '/signet/api/**'
+        '/testnet/api/**', '/signet/api/**', '/testnet4/api/**'
         ],
         target: "https://mempool.space",
         ws: true,
@@ -38,16 +37,6 @@ PROXY_CONFIG = [
         ws: true,
         secure: false,
         changeOrigin: true,
-    },
-    {
-        context: ['/api/bisq**', '/bisq/api/**'],
-        target: "https://bisq.markets",
-        pathRewrite: {
-            "^/api/bisq/": "/bisq/api"
-        },
-        ws: true,
-        secure: false,
-        changeOrigin: true
     },
     {
         context: ['/api/liquid**', '/liquid/api/**'],

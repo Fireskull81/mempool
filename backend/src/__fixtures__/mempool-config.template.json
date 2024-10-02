@@ -1,13 +1,16 @@
 {
   "MEMPOOL": {
     "ENABLED": true,
+    "OFFICIAL": false,
     "NETWORK": "__MEMPOOL_NETWORK__",
     "BACKEND": "__MEMPOOL_BACKEND__",
     "BLOCKS_SUMMARIES_INDEXING": true,
+    "GOGGLES_INDEXING": false,
     "HTTP_PORT": 1,
+    "UNIX_SOCKET_PATH": "/mempool/socket/mempool-bitcoin-mainnet",
     "SPAWN_CLUSTER_PROCS": 2,
     "API_URL_PREFIX": "__MEMPOOL_API_URL_PREFIX__",
-    "AUTOMATIC_BLOCK_REINDEXING": false,
+    "AUTOMATIC_POOLS_UPDATE": false,
     "POLL_RATE_MS": 3,
     "CACHE_DIR": "__MEMPOOL_CACHE_DIR__",
     "CACHE_ENABLED": true,
@@ -26,15 +29,15 @@
     "POOLS_JSON_TREE_URL": "__MEMPOOL_POOLS_JSON_TREE_URL__",
     "POOLS_JSON_URL": "__MEMPOOL_POOLS_JSON_URL__",
     "AUDIT": true,
-    "ADVANCED_GBT_AUDIT": true,
-    "ADVANCED_GBT_MEMPOOL": true,
     "RUST_GBT": false,
+    "LIMIT_GBT": false,
     "CPFP_INDEXING": true,
     "MAX_BLOCKS_BULK_QUERY": 999,
     "DISK_CACHE_BLOCK_INTERVAL": 999,
     "MAX_PUSH_TX_SIZE_WEIGHT": 4000000,
     "ALLOW_UNREACHABLE": true,
-    "PRICE_UPDATES_PER_HOUR": 1
+    "PRICE_UPDATES_PER_HOUR": 1,
+    "MAX_TRACKED_ADDRESSES": 1
   },
   "CORE_RPC": {
     "HOST": "__CORE_RPC_HOST__",
@@ -57,7 +60,8 @@
     "RETRY_UNIX_SOCKET_AFTER": 888,
     "REQUEST_TIMEOUT": 10000,
     "FALLBACK_TIMEOUT": 5000,
-    "FALLBACK": []
+    "FALLBACK": [],
+    "MAX_BEHIND_TIP": 2
   },
   "SECOND_CORE_RPC": {
     "HOST": "__SECOND_CORE_RPC_HOST__",
@@ -77,7 +81,8 @@
     "USERNAME": "__DATABASE_USERNAME__",
     "PASSWORD": "__DATABASE_PASSWORD__",
     "PID_DIR": "__DATABASE_PID_FILE__",
-    "TIMEOUT": 3000
+    "TIMEOUT": 3000,
+    "POOL_SIZE": 100
   },
   "SYSLOG": {
     "ENABLED": false,
@@ -89,10 +94,6 @@
   "STATISTICS": {
     "ENABLED": false,
     "TX_PER_SECOND_SAMPLE_PERIOD": 20
-  },
-  "BISQ": {
-    "ENABLED": true,
-    "DATA_PATH": "__BISQ_DATA_PATH__"
   },
   "SOCKS5PROXY": {
     "ENABLED": true,
@@ -106,9 +107,7 @@
     "MEMPOOL_API": "__EXTERNAL_DATA_SERVER_MEMPOOL_API__",
     "MEMPOOL_ONION": "__EXTERNAL_DATA_SERVER_MEMPOOL_ONION__",
     "LIQUID_API": "__EXTERNAL_DATA_SERVER_LIQUID_API__",
-    "LIQUID_ONION": "__EXTERNAL_DATA_SERVER_LIQUID_ONION__",
-    "BISQ_URL": "__EXTERNAL_DATA_SERVER_BISQ_URL__",
-    "BISQ_ONION": "__EXTERNAL_DATA_SERVER_BISQ_ONION__"
+    "LIQUID_ONION": "__EXTERNAL_DATA_SERVER_LIQUID_ONION__"
   },
   "LIGHTNING": {
     "ENABLED": true,
@@ -133,6 +132,8 @@
     "ENABLED": false,
     "AUDIT": false,
     "AUDIT_START_HEIGHT": 774000,
+    "STATISTICS": false,
+    "STATISTICS_START_TIME": 1481932800,
     "SERVERS": []
   },
   "MEMPOOL_SERVICES": {
@@ -143,5 +144,10 @@
     "ENABLED": false,
     "UNIX_SOCKET_PATH": "/tmp/redis.sock",
     "BATCH_QUERY_BASE_SIZE": 5000
+  },
+  "FIAT_PRICE": {
+    "ENABLED": true,
+    "PAID": false,
+    "API_KEY": "__MEMPOOL_CURRENCY_API_KEY__"
   }
 }

@@ -1,14 +1,14 @@
 import { Inject, Injectable, PLATFORM_ID, LOCALE_ID } from '@angular/core';
-import { ReplaySubject, BehaviorSubject, Subject, fromEvent, Observable, merge } from 'rxjs';
+import { ReplaySubject, BehaviorSubject, Subject, fromEvent, Observable } from 'rxjs';
 import { Transaction } from '../interfaces/electrs.interface';
-import { IBackendInfo, MempoolBlock, MempoolBlockDelta, MempoolInfo, Recommendedfees, ReplacedTransaction, ReplacementInfo, TransactionStripped } from '../interfaces/websocket.interface';
-import { BlockExtended, CpfpInfo, DifficultyAdjustment, MempoolPosition, OptimizedMempoolStats, RbfTree } from '../interfaces/node-api.interface';
+import { AccelerationDelta, HealthCheckHost, IBackendInfo, MempoolBlock, MempoolBlockUpdate, MempoolInfo, Recommendedfees, ReplacedTransaction, ReplacementInfo, isMempoolState } from '../interfaces/websocket.interface';
+import { Acceleration, AccelerationPosition, BlockExtended, CpfpInfo, DifficultyAdjustment, MempoolPosition, OptimizedMempoolStats, RbfTree, TransactionStripped } from '../interfaces/node-api.interface';
 import { Router, NavigationStart } from '@angular/router';
 import { isPlatformBrowser } from '@angular/common';
-import { filter, map, scan, shareReplay } from 'rxjs/operators';
+import { filter, map, scan, share, shareReplay } from 'rxjs/operators';
 import { StorageService } from './storage.service';
 import { hasTouchScreen } from '../shared/pipes/bytes-pipe/utils';
-import { ApiService } from './api.service';
+import { ActiveFilter } from '../shared/filters.utils';
 
 export interface MarkBlockState {
   blockHeight?: number;
@@ -16,21 +16,44 @@ export interface MarkBlockState {
   mempoolBlockIndex?: number;
   txFeePerVSize?: number;
   mempoolPosition?: MempoolPosition;
+  accelerationPositions?: AccelerationPosition[];
 }
 
 export interface ILoadingIndicators { [name: string]: number; }
 
+export interface Customization {
+  theme: string;
+  enterprise?: string;
+  branding: {
+    name: string;
+    site_id?: number;
+    title: string;
+    img?: string;
+    header_img?: string;
+    footer_img?: string;
+    rounded_corner: boolean;
+  },
+  dashboard: {
+    widgets: {
+      component: string;
+      mobileOrder?: number;
+      props: { [key: string]: any };
+    }[];
+  };
+}
+
 export interface Env {
+  MAINNET_ENABLED: boolean;
   TESTNET_ENABLED: boolean;
+  TESTNET4_ENABLED: boolean;
   SIGNET_ENABLED: boolean;
   LIQUID_ENABLED: boolean;
   LIQUID_TESTNET_ENABLED: boolean;
-  BISQ_ENABLED: boolean;
-  BISQ_SEPARATE_BACKEND: boolean;
   ITEMS_PER_PAGE: number;
   KEEP_BLOCKS_AMOUNT: number;
   OFFICIAL_MEMPOOL_SPACE: boolean;
   BASE_MODULE: string;
+  ROOT_NETWORK: string;
   NGINX_PROTOCOL?: string;
   NGINX_HOSTNAME?: string;
   NGINX_PORT?: string;
@@ -40,7 +63,6 @@ export interface Env {
   PACKAGE_JSON_VERSION: string;
   MEMPOOL_WEBSITE_URL: string;
   LIQUID_WEBSITE_URL: string;
-  BISQ_WEBSITE_URL: string;
   MINING_DASHBOARD: boolean;
   LIGHTNING: boolean;
   AUDIT: boolean;
@@ -49,18 +71,24 @@ export interface Env {
   SIGNET_BLOCK_AUDIT_START_HEIGHT: number;
   HISTORICAL_PRICE: boolean;
   ACCELERATOR: boolean;
+  ACCELERATOR_BUTTON: boolean;
+  PUBLIC_ACCELERATIONS: boolean;
+  ADDITIONAL_CURRENCIES: boolean;
   GIT_COMMIT_HASH_MEMPOOL_SPACE?: string;
   PACKAGE_JSON_VERSION_MEMPOOL_SPACE?: string;
+  SERVICES_API?: string;
+  customize?: Customization;
 }
 
 const defaultEnv: Env = {
+  'MAINNET_ENABLED': true,
   'TESTNET_ENABLED': false,
+  'TESTNET4_ENABLED': false,
   'SIGNET_ENABLED': false,
   'LIQUID_ENABLED': false,
   'LIQUID_TESTNET_ENABLED': false,
   'BASE_MODULE': 'mempool',
-  'BISQ_ENABLED': false,
-  'BISQ_SEPARATE_BACKEND': false,
+  'ROOT_NETWORK': '',
   'ITEMS_PER_PAGE': 10,
   'KEEP_BLOCKS_AMOUNT': 8,
   'OFFICIAL_MEMPOOL_SPACE': false,
@@ -73,7 +101,6 @@ const defaultEnv: Env = {
   'PACKAGE_JSON_VERSION': '',
   'MEMPOOL_WEBSITE_URL': 'https://mempool.space',
   'LIQUID_WEBSITE_URL': 'https://liquid.network',
-  'BISQ_WEBSITE_URL': 'https://bisq.markets',
   'MINING_DASHBOARD': true,
   'LIGHTNING': false,
   'AUDIT': false,
@@ -82,32 +109,44 @@ const defaultEnv: Env = {
   'SIGNET_BLOCK_AUDIT_START_HEIGHT': 0,
   'HISTORICAL_PRICE': true,
   'ACCELERATOR': false,
+  'ACCELERATOR_BUTTON': true,
+  'PUBLIC_ACCELERATIONS': false,
+  'ADDITIONAL_CURRENCIES': false,
+  'SERVICES_API': 'https://mempool.space/api/v1/services',
 };
 
 @Injectable({
   providedIn: 'root'
 })
 export class StateService {
+  referrer: string = '';
   isBrowser: boolean = isPlatformBrowser(this.platformId);
+  isMempoolSpaceBuild = window['isMempoolSpaceBuild'] ?? false;
+  backend: 'esplora' | 'electrum' | 'none' = 'esplora';
   network = '';
+  lightningNetworks = ['', 'mainnet', 'bitcoin', 'testnet', 'signet'];
   lightning = false;
   blockVSize: number;
   env: Env;
   latestBlockHeight = -1;
   blocks: BlockExtended[] = [];
+  mempoolSequence: number;
+  mempoolBlockState: { block: number, transactions: { [txid: string]: TransactionStripped} };
 
+  backend$ = new BehaviorSubject<'esplora' | 'electrum' | 'none'>('esplora');
   networkChanged$ = new ReplaySubject<string>(1);
   lightningChanged$ = new ReplaySubject<boolean>(1);
   blocksSubject$ = new BehaviorSubject<BlockExtended[]>([]);
   blocks$: Observable<BlockExtended[]>;
-  transactions$ = new ReplaySubject<TransactionStripped>(6);
-  conversions$ = new ReplaySubject<any>(1);
+  transactions$ = new BehaviorSubject<TransactionStripped[]>(null);
+  conversions$ = new ReplaySubject<Record<string, number>>(1);
   bsqPrice$ = new ReplaySubject<number>(1);
   mempoolInfo$ = new ReplaySubject<MempoolInfo>(1);
   mempoolBlocks$ = new ReplaySubject<MempoolBlock[]>(1);
-  mempoolBlockTransactions$ = new Subject<TransactionStripped[]>();
-  mempoolBlockDelta$ = new Subject<MempoolBlockDelta>();
-  liveMempoolBlockTransactions$: Observable<{ [txid: string]: TransactionStripped}>;
+  mempoolBlockUpdate$ = new Subject<MempoolBlockUpdate>();
+  liveMempoolBlockTransactions$: Observable<{ block: number, transactions: { [txid: string]: TransactionStripped} }>;
+  accelerations$ = new Subject<AccelerationDelta>();
+  liveAccelerations$: Observable<Acceleration[]>;
   txConfirmed$ = new Subject<[string, BlockExtended]>();
   txReplaced$ = new Subject<ReplacedTransaction>();
   txRbfInfo$ = new Subject<RbfTree>();
@@ -116,8 +155,9 @@ export class StateService {
   utxoSpent$ = new Subject<object>();
   difficultyAdjustment$ = new ReplaySubject<DifficultyAdjustment>(1);
   mempoolTransactions$ = new Subject<Transaction>();
-  mempoolTxPosition$ = new Subject<{ txid: string, position: MempoolPosition, cpfp: CpfpInfo | null}>();
+  mempoolTxPosition$ = new BehaviorSubject<{ txid: string, position: MempoolPosition, cpfp: CpfpInfo | null, accelerationPositions?: AccelerationPosition[] }>(null);
   mempoolRemovedTransactions$ = new Subject<Transaction>();
+  multiAddressTransactions$ = new Subject<{ [address: string]: { mempool: Transaction[], confirmed: Transaction[], removed: Transaction[] }}>();
   blockTransactions$ = new Subject<Transaction>();
   isLoadingWebSocket$ = new ReplaySubject<boolean>(1);
   isLoadingMempool$ = new BehaviorSubject<boolean>(true);
@@ -128,10 +168,11 @@ export class StateService {
   loadingIndicators$ = new ReplaySubject<ILoadingIndicators>(1);
   recommendedFees$ = new ReplaySubject<Recommendedfees>(1);
   chainTip$ = new ReplaySubject<number>(-1);
+  serverHealth$ = new Subject<HealthCheckHost[]>();
 
   live2Chart$ = new Subject<OptimizedMempoolStats>();
 
-  viewFiat$ = new BehaviorSubject<boolean>(false);
+  viewAmountMode$: BehaviorSubject<'btc' | 'sats' | 'fiat'>;
   connectionState$ = new BehaviorSubject<0 | 1 | 2>(2);
   isTabHidden$: Observable<boolean>;
 
@@ -146,9 +187,12 @@ export class StateService {
   hideAudit: BehaviorSubject<boolean>;
   fiatCurrency$: BehaviorSubject<string>;
   rateUnits$: BehaviorSubject<string>;
+  blockDisplayMode$: BehaviorSubject<string>;
 
   searchFocus$: Subject<boolean> = new Subject<boolean>();
   menuOpen$: BehaviorSubject<boolean> = new BehaviorSubject(false);
+
+  activeGoggles$: BehaviorSubject<ActiveFilter> = new BehaviorSubject({ mode: 'and', filters: [], gradient: 'age' });
 
   constructor(
     @Inject(PLATFORM_ID) private platformId: any,
@@ -156,6 +200,8 @@ export class StateService {
     private router: Router,
     private storageService: StorageService,
   ) {
+    this.referrer = window.document.referrer;
+
     const browserWindow = window || {};
     // @ts-ignore
     const browserWindowEnv = browserWindow.__env || {};
@@ -163,6 +209,10 @@ export class StateService {
 
     if (defaultEnv.BASE_MODULE !== 'mempool') {
       this.env.MINING_DASHBOARD = false;
+    }
+
+    if (document.location.hostname.endsWith('.onion')) {
+      this.env.SERVICES_API = 'http://mempoolhqx4isw62xs7abwphsq7ldayuidyx2v2oethdhhj6mlo2r6ad.onion/api/v1/services';
     }
 
     if (this.isBrowser) {
@@ -182,37 +232,61 @@ export class StateService {
       }
     });
 
-    this.liveMempoolBlockTransactions$ = merge(
-      this.mempoolBlockTransactions$.pipe(map(transactions => { return { transactions }; })),
-      this.mempoolBlockDelta$.pipe(map(delta => { return { delta }; })),
-    ).pipe(scan((transactions: { [txid: string]: TransactionStripped }, change: any): { [txid: string]: TransactionStripped } => {
-      if (change.transactions) {
-        const txMap = {}
+    this.liveMempoolBlockTransactions$ = this.mempoolBlockUpdate$.pipe(scan((acc: { block: number, transactions: { [txid: string]: TransactionStripped } }, change: MempoolBlockUpdate): { block: number, transactions: { [txid: string]: TransactionStripped } } => {
+      if (isMempoolState(change)) {
+        const txMap = {};
         change.transactions.forEach(tx => {
           txMap[tx.txid] = tx;
-        })
-        return txMap;
+        });
+        this.mempoolBlockState = {
+          block: change.block,
+          transactions: txMap
+        };
+        return this.mempoolBlockState;
       } else {
-        change.delta.changed.forEach(tx => {
-          transactions[tx.txid].rate = tx.rate;
-        })
-        change.delta.removed.forEach(txid => {
-          delete transactions[txid];
+        change.added.forEach(tx => {
+          acc.transactions[tx.txid] = tx;
         });
-        change.delta.added.forEach(tx => {
-          transactions[tx.txid] = tx;
+        change.removed.forEach(txid => {
+          delete acc.transactions[txid];
         });
-        return transactions;
+        change.changed.forEach(tx => {
+          if (acc.transactions[tx.txid]) {
+            acc.transactions[tx.txid].rate = tx.rate;
+            acc.transactions[tx.txid].acc = tx.acc;
+          }
+        });
+        this.mempoolBlockState = {
+          block: change.block,
+          transactions: acc.transactions
+        };
+        return this.mempoolBlockState;
       }
-    }, {}));
+    }, {}),
+    share()
+    );
+    this.liveMempoolBlockTransactions$.subscribe();
 
-    if (this.env.BASE_MODULE === 'bisq') {
-      this.network = this.env.BASE_MODULE;
-      this.networkChanged$.next(this.env.BASE_MODULE);
-    }
+    // Emits the full list of pending accelerations each time it changes
+    this.liveAccelerations$ = this.accelerations$.pipe(
+      scan((accelerations: { [txid: string]: Acceleration }, delta: AccelerationDelta) => {
+        if (delta.reset) {
+          accelerations = {};
+        } else {
+          for (const txid of delta.removed) {
+            delete accelerations[txid];
+          }
+        }
+        for (const acc of delta.added) {
+          accelerations[acc.txid] = acc;
+        }
+        return accelerations;
+      }, {}),
+      map((accMap) => Object.values(accMap).sort((a,b) => b.added - a.added))
+    );
 
     this.networkChanged$.subscribe((network) => {
-      this.transactions$ = new ReplaySubject<TransactionStripped>(6);
+      this.transactions$ = new BehaviorSubject<TransactionStripped[]>(null);
       this.blocksSubject$.next([]);
     });
 
@@ -249,6 +323,16 @@ export class StateService {
 
     const rateUnitPreference = this.storageService.getValue('rate-unit-preference');
     this.rateUnits$ = new BehaviorSubject<string>(rateUnitPreference || 'vb');
+
+    const blockDisplayModePreference = this.storageService.getValue('block-display-mode-preference');
+    this.blockDisplayMode$ = new BehaviorSubject<string>(blockDisplayModePreference || 'fees');
+
+    const viewAmountModePreference = this.storageService.getValue('view-amount-mode') as 'btc' | 'sats' | 'fiat';
+    this.viewAmountMode$ = new BehaviorSubject<'btc' | 'sats' | 'fiat'>(viewAmountModePreference || 'btc');
+
+    this.backend$.subscribe(backend => {
+      this.backend = backend;
+    });
   }
 
   setNetworkBasedonUrl(url: string) {
@@ -259,22 +343,15 @@ export class StateService {
     // /^\/                                         starts with a forward slash...
     // (?:[a-z]{2}(?:-[A-Z]{2})?\/)?                optional locale prefix (non-capturing)
     // (?:preview\/)?                               optional "preview" prefix (non-capturing)
-    // (bisq|testnet|liquidtestnet|liquid|signet)/  network string (captured as networkMatches[1])
+    // (testnet|signet)/                            network string (captured as networkMatches[1])
     // ($|\/)                                       network string must end or end with a slash
-    const networkMatches = url.match(/^\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?(?:preview\/)?(bisq|testnet|liquidtestnet|liquid|signet)($|\/)/);
+    let networkMatches: object = url.match(/^\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?(?:preview\/)?(testnet4?|signet)($|\/)/);
+
+    if (!networkMatches && this.env.ROOT_NETWORK) {
+      networkMatches = { 1: this.env.ROOT_NETWORK };
+    }
+
     switch (networkMatches && networkMatches[1]) {
-      case 'liquid':
-        if (this.network !== 'liquid') {
-          this.network = 'liquid';
-          this.networkChanged$.next('liquid');
-        }
-        return;
-      case 'liquidtestnet':
-        if (this.network !== 'liquidtestnet') {
-          this.network = 'liquidtestnet';
-          this.networkChanged$.next('liquidtestnet');
-        }
-        return;
       case 'signet':
         if (this.network !== 'signet') {
           this.network = 'signet';
@@ -282,7 +359,7 @@ export class StateService {
         }
         return;
       case 'testnet':
-        if (this.network !== 'testnet') {
+        if (this.network !== 'testnet' && this.network !== 'liquidtestnet') {
           if (this.env.BASE_MODULE === 'liquid') {
             this.network = 'liquidtestnet';
             this.networkChanged$.next('liquidtestnet');
@@ -292,10 +369,10 @@ export class StateService {
           }
         }
         return;
-      case 'bisq':
-        if (this.network !== 'bisq') {
-          this.network = 'bisq';
-          this.networkChanged$.next('bisq');
+      case 'testnet4':
+        if (this.network !== 'testnet4') {
+          this.network = 'testnet4';
+          this.networkChanged$.next('testnet4');
         }
         return;
       default:
@@ -318,6 +395,10 @@ export class StateService {
     const networkMatches = url.match(/\/lightning\//);
     this.lightning = !!networkMatches;
     this.lightningChanged$.next(this.lightning);
+  }
+
+  networkSupportsLightning() {
+    return this.env.LIGHTNING && this.lightningNetworks.includes(this.network);
   }
 
   getHiddenProp(){
@@ -345,8 +426,12 @@ export class StateService {
     return this.network === 'liquid' || this.network === 'liquidtestnet';
   }
 
+  isMainnet(): boolean {
+    return this.env.ROOT_NETWORK === '' && this.network === '';
+  }
+
   isAnyTestnet(): boolean {
-    return ['testnet', 'signet', 'liquidtestnet'].includes(this.network);
+    return ['testnet', 'testnet4', 'signet', 'liquidtestnet'].includes(this.network);
   }
 
   resetChainTip() {

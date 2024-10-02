@@ -1,0 +1,66 @@
+.tomahawk {
+  .links {
+    text-align: right;
+    margin-inline-end: 1em;
+
+    a, span {
+      margin-left: 1em;
+    }
+  }
+
+  .status-panel {
+    max-width: 720px;
+    margin: auto;
+    padding: 1em;
+    background: var(--box-bg);
+  }
+
+  .status-table {
+    width: 100%;
+
+    td, th {
+      padding: 0.25em;
+      width: 0%;
+
+      &.rank, &.flag {
+        text-align: right;
+      }
+      &.updated {
+        display: none;
+        text-align: right;
+        white-space: nowrap;
+      }
+      &.rtt, &.height {
+        text-align: right;
+      }
+      &.only-small {
+        display: table-cell;
+      }
+      &.only-large {
+        display: none;
+      }
+      &.height {
+        padding-right: 0.5em;
+      }
+      &.host {
+        width: 100%;
+        max-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      @media (min-width: 576px) {
+        &.updated {
+          display: table-cell;
+        }
+        &.only-small {
+          display: none;
+        }
+        &.only-large {
+          display: table-cell;
+        }
+      }
+    }
+  }
+}

@@ -22,19 +22,18 @@ cd mempool/frontend
 
 ### 2. Specify Website
 
-The same frontend codebase is used for https://mempool.space, https://liquid.network and https://bisq.markets.
+The same frontend codebase is used for https://mempool.space and https://liquid.network.
 
 Configure the frontend for the site you want by running the corresponding command:
 
 ```
 $ npm run config:defaults:mempool
 $ npm run config:defaults:liquid
-$ npm run config:defaults:bisq
 ```
 
 ### 3. Run the Frontend
 
-_Make sure to use Node.js 16.10 and npm 7._
+_Make sure to use Node.js 20.x and npm 9.x or newer._
 
 Install project dependencies and run the frontend server:
 
@@ -71,7 +70,7 @@ Set up the [Mempool backend](../backend/) first, if you haven't already.
 
 ### 1. Build the Frontend
 
-_Make sure to use Node.js 16.10 and npm 7._
+_Make sure to use Node.js 20.x and npm 9.x or newer._
 
 Build the frontend:
 

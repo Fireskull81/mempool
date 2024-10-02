@@ -7,7 +7,7 @@
     <!-- pending stats -->
     <div class="col">
       <div class="main-title">
-        <span [attr.data-cy]="'pending-accelerations'" i18n="accelerator.pending-accelerations">Active accelerations</span>
+        <span [attr.data-cy]="'pending-accelerations'" i18n="accelerator.pending-accelerations">Active Accelerations</span>
       </div>
       <div class="card-wrapper">
         <div class="card">
@@ -22,12 +22,38 @@
     <div class="col">
       <div class="main-title">
         <span [attr.data-cy]="'acceleration-stats'" i18n="accelerator.acceleration-stats">Acceleration stats</span>&nbsp;
-        <span style="font-size: xx-small" i18n="mining.144-blocks">(1 month)</span>
+        @switch (timespan) {
+          @case ('24h') {
+            <span style="font-size: xx-small" i18n="mining.1-day">(1 day)</span>
+          }
+          @case ('1w') {
+            <span style="font-size: xx-small" i18n="mining.1-week">(1 week)</span>
+          }
+          @case ('1m') {
+            <span style="font-size: xx-small" i18n="mining.1-month">(1 month)</span>
+          }
+          @case ('all') {
+            <span style="font-size: xx-small" i18n="mining.all-time">(all time)</span>
+          }
+        }
       </div>
       <div class="card-wrapper">
         <div class="card">
           <div class="card-body more-padding">
-            <app-acceleration-stats timespan="1m" [accelerations$]="minedAccelerations$"></app-acceleration-stats>
+            <app-acceleration-stats [timespan]="timespan"></app-acceleration-stats>
+            <div class="widget-toggler">
+              <a href="" (click)="setTimespan('24h')" class="toggler-option"
+                [ngClass]="{'inactive': timespan === '24h'}"><small>24h</small></a>
+              <span style="color: #ffffff66; font-size: 8px"> | </span>
+              <a href="" (click)="setTimespan('1w')" class="toggler-option"
+                [ngClass]="{'inactive': timespan === '1w'}"><small>1w</small></a>
+              <span style="color: #ffffff66; font-size: 8px"> | </span>
+              <a href="" (click)="setTimespan('1m')" class="toggler-option"
+              [ngClass]="{'inactive': timespan === '1m'}"><small>1m</small></a>
+              <span style="color: #ffffff66; font-size: 8px"> | </span>
+              <a href="" (click)="setTimespan('all')" class="toggler-option"
+              [ngClass]="{'inactive': timespan === 'all'}"><small>all</small></a>
+            </div>
           </div>
         </div>
       </div>
@@ -37,7 +63,12 @@
     <div class="col" style="margin-bottom: 1.47rem">
       <div class="card">
         <div class="card-body pl-lg-3 pr-lg-3 pl-2 pr-2">
-          <div class="mempool-block-wrapper">
+          <a class="title-link" href="" [routerLink]="['/mempool-block/0' | relativeUrl]">
+            <h5 class="card-title d-inline">Mempool Goggles&trade; : <ng-container i18n="accelerator.accelerations">Accelerations</ng-container></h5>
+            <span>&nbsp;</span>
+            <fa-icon [icon]="['fas', 'external-link-alt']" [fixedWidth]="true" style="vertical-align: 'text-top'; font-size: 13px; color: var(--title-fg)"></fa-icon>
+          </a>
+          <div class="mempool-block-wrapper" *ngIf="webGlEnabled">
             <app-mempool-block-overview [index]="0" [overrideColors]="getAcceleratorColor"></app-mempool-block-overview>
           </div>
         </div>
@@ -48,30 +79,28 @@
     <div class="col" style="margin-bottom: 1.47rem">
       <div class="card graph-card">
         <div class="card-body pl-2 pr-2">
-          <app-acceleration-fees-graph [attr.data-cy]="'acceleration-fees'" [widget]=true [accelerations$]="accelerations$"></app-acceleration-fees-graph>
+          <h5 class="card-title" i18n="acceleration.total-bid-boost">Total Bid Boost</h5>
+          <div class="mempool-graph">
+            <app-acceleration-fees-graph
+              [height]="graphHeight"
+              [attr.data-cy]="'acceleration-fees'"
+              [widget]=true
+              [period]="timespan"
+            ></app-acceleration-fees-graph>
+          </div>
           <div class="mt-1"><a [attr.data-cy]="'acceleration-fees-view-more'" [routerLink]="['/graphs/acceleration/fees' | relativeUrl]" i18n="dashboard.view-more">View more &raquo;</a></div>
         </div>
       </div>
     </div>
-
-    <!-- Avg block fees graph -->
-    <!-- <div class="col" style="margin-bottom: 1.47rem">
-      <div class="card">
-        <div class="card-body pl-lg-3 pr-lg-3 pl-2 pr-2">
-          <app-block-fee-rates-graph [attr.data-cy]="'hashrate-graph'" [widget]="true"></app-block-fee-rates-graph>
-          <div class="mt-1"><a [routerLink]="['/graphs/mining/block-fee-rates' | relativeUrl]" fragment="1m" i18n="dashboard.view-more">View more &raquo;</a></div>
-        </div>
-      </div>
-    </div> -->
 
     <!-- Recent Accelerations List -->
     <div class="col">
       <div class="card list-card">
         <div class="card-body">
           <div class="title-link">
-            <h5 class="card-title d-inline" i18n="dashboard.recent-accelerations">Active Accelerations</h5>
+            <h5 class="card-title d-inline" i18n="accelerator.pending-accelerations">Active Accelerations</h5>
           </div>
-          <app-accelerations-list [attr.data-cy]="'pending-accelerations'" [widget]=true [pending]="true" [accelerations$]="pendingAccelerations$"></app-accelerations-list>
+          <app-accelerations-list [attr.data-cy]="'pending-accelerations'" [widget]=true [pending]=true [accelerations$]="pendingAccelerations$"></app-accelerations-list>
         </div>
       </div>
     </div>
@@ -80,10 +109,10 @@
     <div class="col">
       <div class="card list-card">
         <div class="card-body">
-          <a class="title-link" href="" [routerLink]="['/acceleration-list' | relativeUrl]">
+          <a class="title-link" href="" [routerLink]="['/acceleration/list' | relativeUrl]">
             <h5 class="card-title d-inline" i18n="dashboard.recent-accelerations">Recent Accelerations</h5>
             <span>&nbsp;</span>
-            <fa-icon [icon]="['fas', 'external-link-alt']" [fixedWidth]="true" style="vertical-align: 'text-top'; font-size: 13px; color: #4a68b9"></fa-icon>
+            <fa-icon [icon]="['fas', 'external-link-alt']" [fixedWidth]="true" style="vertical-align: 'text-top'; font-size: 13px; color: var(--title-fg)"></fa-icon>
           </a>
           <app-accelerations-list [attr.data-cy]="'recent-accelerations'" [widget]=true [accelerations$]="minedAccelerations$"></app-accelerations-list>
         </div>

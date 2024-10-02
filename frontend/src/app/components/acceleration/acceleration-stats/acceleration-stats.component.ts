@@ -1,9 +1,13 @@
-import { ChangeDetectionStrategy, Component, Input, OnInit } from '@angular/core';
-import { Observable, of } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
-import { ApiService } from '../../../services/api.service';
-import { StateService } from '../../../services/state.service';
-import { Acceleration } from '../../../interfaces/node-api.interface';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, OnInit } from '@angular/core';
+import { Observable } from 'rxjs';
+import { ServicesApiServices } from '../../../services/services-api.service';
+
+export type AccelerationStats = {
+  totalRequested: number;
+  totalBidBoost: number;
+  successRate: number;
+  totalVsize: number;
+}
 
 @Component({
   selector: 'app-acceleration-stats',
@@ -11,36 +15,41 @@ import { Acceleration } from '../../../interfaces/node-api.interface';
   styleUrls: ['./acceleration-stats.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AccelerationStatsComponent implements OnInit {
-  @Input() timespan: '24h' | '1w' | '1m' = '24h';
-  @Input() accelerations$: Observable<Acceleration[]>;
-  public accelerationStats$: Observable<any>;
+export class AccelerationStatsComponent implements OnInit, OnChanges {
+  @Input() timespan: '24h' | '3d' | '1w' | '1m' | 'all' = '1w';
+  accelerationStats$: Observable<AccelerationStats>;
+  blocksInPeriod: number = 7 * 144;
 
   constructor(
-    private apiService: ApiService,
-    private stateService: StateService,
+    private servicesApiService: ServicesApiServices
   ) { }
 
   ngOnInit(): void {
-    this.accelerationStats$ = this.accelerations$.pipe(
-      switchMap(accelerations => {
-        let totalFeesPaid = 0;
-        let totalSucceeded = 0;
-        let totalCanceled = 0;
-        for (const acceleration of accelerations) {
-          if (acceleration.status === 'completed') {
-            totalSucceeded++;
-            totalFeesPaid += acceleration.feePaid || 0;
-          } else if (acceleration.status === 'failed') {
-            totalCanceled++;
-          }
-        }
-        return of({
-          count: totalSucceeded,
-          totalFeesPaid,
-          successRate: (totalSucceeded + totalCanceled > 0) ? ((totalSucceeded / (totalSucceeded + totalCanceled)) * 100) : 0.0,
-        });
-      })
-    );
+    this.updateStats();
+  }
+
+  ngOnChanges(): void {
+    this.updateStats();
+  }
+
+  updateStats(): void {
+    this.accelerationStats$ = this.servicesApiService.getAccelerationStats$({ timeframe: this.timespan });
+    switch (this.timespan) {
+      case '24h':
+        this.blocksInPeriod = 144;
+        break;
+      case '3d':
+        this.blocksInPeriod = 3 * 144;
+        break;
+      case '1w':
+        this.blocksInPeriod = 7 * 144;
+        break;
+      case '1m':
+        this.blocksInPeriod = 30 * 144;
+        break;
+      case 'all':
+        this.blocksInPeriod = Infinity;
+        break;
+    }
   }
 }

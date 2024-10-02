@@ -1,4 +1,4 @@
-describe.skip('Liquid', () => {
+describe('Liquid', () => {
   const baseModule = Cypress.env('BASE_MODULE');
   const basePath = '';
 
@@ -23,6 +23,13 @@ describe.skip('Liquid', () => {
       cy.get('#mempool-block-0 > .blockLink').should('exist');
     });
 
+    it('load first mempool block after skeleton loads', () => {
+      cy.visit(`${basePath}`);
+      cy.waitForSkeletonGone();
+      cy.get('#mempool-block-0 > .blockLink').click();
+      cy.waitForSkeletonGone();
+    });
+
     it('loads the dashboard', () => {
       cy.visit(`${basePath}`);
       cy.waitForSkeletonGone();
@@ -38,6 +45,7 @@ describe.skip('Liquid', () => {
 
     it('loads a specific block page', () => {
       cy.visit(`${basePath}/block/7e1369a23a5ab861e7bdede2aadcccae4ea873ffd9caf11c7c5541eb5bcdff54`);
+      cy.get('.pagination').scrollIntoView({ offset: { top: 200, left: 0 } });
       cy.waitForSkeletonGone();
     });
 
@@ -64,30 +72,17 @@ describe.skip('Liquid', () => {
       });
     });
 
-    it('renders unconfidential addresses correctly on mobile', () => {
-      cy.viewport('iphone-6');
-      cy.visit(`${basePath}/address/ex1qqmmjdwrlg59c8q4l75sj6wedjx57tj5grt8pat`);
-      cy.waitForSkeletonGone();
-      //TODO: Add proper IDs for these selectors
-      const firstRowSelector = '.container-xl > :nth-child(3) > div > :nth-child(1) > .table > tbody';
-      const thirdRowSelector = '.container-xl > :nth-child(3) > div > :nth-child(3)';
-      cy.get(firstRowSelector).invoke('css', 'width').then(firstRowWidth => {
-        cy.get(thirdRowSelector).invoke('css', 'width').then(thirdRowWidth => {
-          expect(parseInt(firstRowWidth)).to.be.lessThan(parseInt(thirdRowWidth));
-        });
-      });
-    });
-
     describe('peg in/peg out', () => {
       it('loads peg in addresses', () => {
         cy.visit(`${basePath}/tx/fe764f7bedfc2a37b29d9c8aef67d64a57d253a6b11c5a55555cfd5826483a58`);
         cy.waitForSkeletonGone();
         //TODO: Change to an element id so we don't assert on a string
         cy.get('.table-tx-vin').should('contain', 'Peg-in');
-        cy.get('.table-tx-vin a').click().then(() => {
+        //Remove the target=_blank attribute so the new url opens in the same tab
+        cy.get('.table-tx-vin a').invoke('removeAttr', 'target').click().then(() => {
           cy.waitForSkeletonGone();
           if (baseModule === 'liquid') {
-            cy.url().should('eq', 'https://mempool.space/tx/f148c0d854db4174ea420655235f910543f0ec3680566dcfdf84fb0a1697b592');
+            cy.url().should('eq', 'https://mempool.space/tx/f148c0d854db4174ea420655235f910543f0ec3680566dcfdf84fb0a1697b592#vout=0');
           } else {
             //TODO: Use an environment variable to get the hostname
             cy.url().should('eq', 'http://localhost:4200/tx/f148c0d854db4174ea420655235f910543f0ec3680566dcfdf84fb0a1697b592');
@@ -98,7 +93,8 @@ describe.skip('Liquid', () => {
       it('loads peg out addresses', () => {
         cy.visit(`${basePath}/tx/ecf6eba04ffb3946faa172343c87162df76f1a57b07b0d6dc6ad956b13376dc8`);
         cy.waitForSkeletonGone();
-        cy.get('.table-tx-vout a').first().click().then(() => {
+        //Remove the target=_blank attribute so the new url opens in the same tab
+        cy.get('.table-tx-vout a').first().invoke('removeAttr', 'target').click().then(() => {
           cy.waitForSkeletonGone();
           if (baseModule === 'liquid') {
             cy.url().should('eq', 'https://mempool.space/address/1BxoGcMg14oaH3CwHD2hF4gU9VcfgX5yoR');

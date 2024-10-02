@@ -2,13 +2,14 @@ import { Component, OnInit, ChangeDetectionStrategy, EventEmitter, Output, ViewC
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { EventType, NavigationStart, Router } from '@angular/router';
 import { AssetsService } from '../../services/assets.service';
-import { StateService } from '../../services/state.service';
+import { Env, StateService } from '../../services/state.service';
 import { Observable, of, Subject, zip, BehaviorSubject, combineLatest } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap, catchError, map, startWith,  tap } from 'rxjs/operators';
 import { ElectrsApiService } from '../../services/electrs-api.service';
 import { RelativeUrlPipe } from '../../shared/pipes/relative-url/relative-url.pipe';
 import { ApiService } from '../../services/api.service';
 import { SearchResultsComponent } from './search-results/search-results.component';
+import { Network, findOtherNetworks, getRegex, getTargetUrl, needBaseModuleChange } from '../../shared/regex.utils';
 
 @Component({
   selector: 'app-search-form',
@@ -18,9 +19,10 @@ import { SearchResultsComponent } from './search-results/search-results.componen
 })
 export class SearchFormComponent implements OnInit {
   @Input() hamburgerOpen = false;
-  
+  env: Env;
   network = '';
   assets: object = {};
+  pools: object[] = [];
   isSearching = false;
   isTypeaheading$ = new BehaviorSubject<boolean>(false);
   typeAhead$: Observable<any>;
@@ -36,12 +38,13 @@ export class SearchFormComponent implements OnInit {
     }
   }
 
-  regexAddress = /^([a-km-zA-HJ-NP-Z1-9]{26,35}|[a-km-zA-HJ-NP-Z1-9]{80}|[A-z]{2,5}1[a-zA-HJ-NP-Z0-9]{39,59}|04[a-fA-F0-9]{128}|(02|03)[a-fA-F0-9]{64})$/;
-  regexBlockhash = /^[0]{8}[a-fA-F0-9]{56}$/;
-  regexTransaction = /^([a-fA-F0-9]{64})(:\d+)?$/;
-  regexBlockheight = /^[0-9]{1,9}$/;
-  regexDate = /^(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}(?: \d{1,2}:\d{2})?)$/;
-  regexUnixTimestamp = /^\d{10}$/;
+  regexAddress = getRegex('address', 'mainnet'); // Default to mainnet
+  regexBlockhash = getRegex('blockhash', 'mainnet');
+  regexTransaction = getRegex('transaction');
+  regexBlockheight = getRegex('blockheight');
+  regexDate = getRegex('date');
+  regexUnixTimestamp = getRegex('timestamp');
+
   focus$ = new Subject<string>();
   click$ = new Subject<string>();
 
@@ -66,8 +69,14 @@ export class SearchFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.stateService.networkChanged$.subscribe((network) => this.network = network);
-    
+    this.env = this.stateService.env;
+    this.stateService.networkChanged$.subscribe((network) => {
+      this.network = network;
+      // TODO: Eventually change network type here from string to enum of consts
+      this.regexAddress = getRegex('address', network as any || 'mainnet');
+      this.regexBlockhash = getRegex('blockhash', network as any || 'mainnet');
+    });
+
     this.router.events.subscribe((e: NavigationStart) => { // Reset search focus when changing page
       if (this.searchInput && e.type === EventType.NavigationStart) {
         this.searchInput.nativeElement.blur();
@@ -96,9 +105,6 @@ export class SearchFormComponent implements OnInit {
     const searchText$ = this.searchForm.get('searchText').valueChanges
     .pipe(
       map((text) => {
-        if (this.network === 'bisq' && text.match(/^(b)[^c]/i)) {
-          return text.substr(1);
-        }
         return text.trim();
       }),
       tap((text) => {
@@ -113,14 +119,16 @@ export class SearchFormComponent implements OnInit {
         if (!text.length) {
           return of([
             [],
-            { nodes: [], channels: [] }
+            { nodes: [], channels: [] },
+            this.pools
           ]);
         }
         this.isTypeaheading$.next(true);
-        if (!this.stateService.env.LIGHTNING) {
+        if (!this.stateService.networkSupportsLightning()) {
           return zip(
             this.electrsApiService.getAddressesByPrefix$(text).pipe(catchError(() => of([]))),
             [{ nodes: [], channels: [] }],
+            this.getMiningPools()
           );
         }
         return zip(
@@ -129,12 +137,10 @@ export class SearchFormComponent implements OnInit {
             nodes: [],
             channels: [],
           }))),
+          this.getMiningPools()
         );
       }),
       map((result: any[]) => {
-        if (this.network === 'bisq') {
-          result[0] = result[0].map((address: string) => 'B' + address);
-        }
         return result;
       }),
       tap(() => {
@@ -151,11 +157,14 @@ export class SearchFormComponent implements OnInit {
           {
             nodes: [],
             channels: [],
-          }
+          },
+          this.pools
         ]))
       ]
       ).pipe(
         map((latestData) => {
+          this.pools = latestData[1][2] || [];
+
           let searchText = latestData[0];
           if (!searchText.length) {
             return {
@@ -164,9 +173,12 @@ export class SearchFormComponent implements OnInit {
               blockHeight: false,
               txId: false,
               address: false,
+              otherNetworks: [],
               addresses: [],
               nodes: [],
               channels: [],
+              liquidAsset: [],
+              pools: []
             };
           }
 
@@ -174,19 +186,26 @@ export class SearchFormComponent implements OnInit {
           const addressPrefixSearchResults = result[0];
           const lightningResults = result[1];
 
+          // Do not show date and timestamp results for liquid
+          const isNetworkBitcoin = this.network === '' || this.network === 'testnet' || this.network === 'testnet4' || this.network === 'signet';
+
           const matchesBlockHeight = this.regexBlockheight.test(searchText) && parseInt(searchText) <= this.stateService.latestBlockHeight;
-          const matchesDateTime = this.regexDate.test(searchText) && new Date(searchText).toString() !== 'Invalid Date';
-          const matchesUnixTimestamp = this.regexUnixTimestamp.test(searchText);
+          const matchesDateTime = this.regexDate.test(searchText) && new Date(searchText).toString() !== 'Invalid Date' && new Date(searchText).getTime() <= Date.now() && isNetworkBitcoin;
+          const matchesUnixTimestamp = this.regexUnixTimestamp.test(searchText) && parseInt(searchText) <= Math.floor(Date.now() / 1000) && isNetworkBitcoin;
           const matchesTxId = this.regexTransaction.test(searchText) && !this.regexBlockhash.test(searchText);
           const matchesBlockHash = this.regexBlockhash.test(searchText);
           const matchesAddress = !matchesTxId && this.regexAddress.test(searchText);
-
-          if (matchesAddress && this.network === 'bisq') {
-            searchText = 'B' + searchText;
-          }
-
+          const publicKey = matchesAddress && searchText.startsWith('0');
+          const otherNetworks = findOtherNetworks(searchText, this.network as any || 'mainnet', this.env);
+          const liquidAsset = this.assets ? (this.assets[searchText] || []) : [];
+          const pools = this.pools.filter(pool => pool["name"].toLowerCase().includes(searchText.toLowerCase())).slice(0, 10);
+          
           if (matchesDateTime && searchText.indexOf('/') !== -1) {
             searchText = searchText.replace(/\//g, '-');
+          }
+
+          if (publicKey) {
+            otherNetworks.length = 0;
           }
 
           return {
@@ -198,9 +217,13 @@ export class SearchFormComponent implements OnInit {
             txId: matchesTxId,
             blockHash: matchesBlockHash,
             address: matchesAddress,
-            addresses: addressPrefixSearchResults,
+            publicKey: publicKey,
+            addresses: matchesAddress && addressPrefixSearchResults.length === 1 && searchText === addressPrefixSearchResults[0] ? [] : addressPrefixSearchResults, // If there is only one address and it matches the search text, don't show it in the dropdown
+            otherNetworks: otherNetworks,
             nodes: lightningResults.nodes,
             channels: lightningResults.channels,
+            liquidAsset: liquidAsset,
+            pools: pools
           };
         })
       );
@@ -223,6 +246,17 @@ export class SearchFormComponent implements OnInit {
       this.navigate('/lightning/node/', result.public_key);
     } else if (result.short_id) {
       this.navigate('/lightning/channel/', result.id);
+    } else if (result.network) {
+      if (result.isNetworkAvailable) {
+        this.navigate('/address/', result.address, undefined, result.network);
+      } else {
+        this.searchForm.setValue({
+          searchText: '',
+        });
+        this.isSearching = false;
+      }
+    } else if (result.slug) {
+      this.navigate('/mining/pool/', result.slug);
     }
   }
 
@@ -230,6 +264,7 @@ export class SearchFormComponent implements OnInit {
     const searchText = result || this.searchForm.value.searchText.trim();
     if (searchText) {
       this.isSearching = true;
+
       if (!this.regexTransaction.test(searchText) && this.regexAddress.test(searchText)) {
         this.navigate('/address/', searchText);
       } else if (this.regexBlockhash.test(searchText)) {
@@ -239,16 +274,16 @@ export class SearchFormComponent implements OnInit {
       } else if (this.regexTransaction.test(searchText)) {
         const matches = this.regexTransaction.exec(searchText);
         if (this.network === 'liquid' || this.network === 'liquidtestnet') {
-          if (this.assets[matches[1]]) {
-            this.navigate('/assets/asset/', matches[1]);
+          if (this.assets[matches[0]]) {
+            this.navigate('/assets/asset/', matches[0]);
           }
-          this.electrsApiService.getAsset$(matches[1])
+          this.electrsApiService.getAsset$(matches[0])
             .subscribe(
-              () => { this.navigate('/assets/asset/', matches[1]); },
+              () => { this.navigate('/assets/asset/', matches[0]); },
               () => {
-                this.electrsApiService.getBlock$(matches[1])
+                this.electrsApiService.getBlock$(matches[0])
                   .subscribe(
-                    (block) => { this.navigate('/block/', matches[1], { state: { data: { block } } }); },
+                    (block) => { this.navigate('/block/', matches[0], { state: { data: { block } } }); },
                     () => { this.navigate('/tx/', matches[0]); });
               }
             );
@@ -258,23 +293,57 @@ export class SearchFormComponent implements OnInit {
       } else if (this.regexDate.test(searchText) || this.regexUnixTimestamp.test(searchText)) {
         let timestamp: number;
         this.regexDate.test(searchText) ? timestamp = Math.floor(new Date(searchText).getTime() / 1000) : timestamp = searchText;
+        // Check if timestamp is too far in the future or before the genesis block
+        if (timestamp > Math.floor(Date.now() / 1000)) {
+          this.isSearching = false;
+          return;
+        }
         this.apiService.getBlockDataFromTimestamp$(timestamp).subscribe(
           (data) => { this.navigate('/block/', data.hash); },
           (error) => { console.log(error); this.isSearching = false; }
         );
       } else {
-        this.searchResults.searchButtonClick();
         this.isSearching = false;
       }
     }
   }
 
-  navigate(url: string, searchText: string, extras?: any): void {
-    this.router.navigate([this.relativeUrlPipe.transform(url), searchText], extras);
-    this.searchTriggered.emit();
-    this.searchForm.setValue({
-      searchText: '',
-    });
-    this.isSearching = false;
+
+  navigate(url: string, searchText: string, extras?: any, swapNetwork?: string) {
+    if (needBaseModuleChange(this.env.BASE_MODULE as 'liquid' | 'mempool', swapNetwork as Network)) {
+      window.location.href = getTargetUrl(swapNetwork as Network, searchText, this.env);
+    } else {
+      this.router.navigate([this.relativeUrlPipe.transform(url, swapNetwork), searchText], extras);
+      this.searchTriggered.emit();
+      this.searchForm.setValue({
+        searchText: '',
+      });
+      this.isSearching = false;
+    }
+  }
+
+  getMiningPools(): Observable<any> {
+    return this.pools.length ? of(this.pools) : combineLatest([
+      this.apiService.listPools$(undefined),
+      this.apiService.listPools$('1y')
+    ]).pipe(
+      map(([poolsResponse, activePoolsResponse]) => {
+        const activePoolSlugs = new Set(activePoolsResponse.body.pools.map(pool => pool.slug));
+
+        return poolsResponse.body.map(pool => ({
+          name: pool.name,
+          slug: pool.slug,
+          active: activePoolSlugs.has(pool.slug)
+        }))
+          // Sort: active pools first, then alphabetically
+          .sort((a, b) => {
+            if (a.active && !b.active) return -1;
+            if (!a.active && b.active) return 1;
+            return a.slug < b.slug ? -1 : 1;
+          });
+
+      }),
+      catchError(() => of([]))
+    );
   }
 }

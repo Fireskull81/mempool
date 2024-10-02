@@ -29,6 +29,9 @@ export interface CpfpInfo {
   sigops?: number;
   adjustedVsize?: number;
   acceleration?: boolean;
+  acceleratedBy?: number[];
+  acceleratedAt?: number;
+  feeDelta?: number;
 }
 
 export interface RbfInfo {
@@ -54,6 +57,7 @@ export interface DifficultyAdjustment {
   previousTime: number;
   nextRetargetHeight: number;
   timeAvg: number;
+  adjustedTimeAvg: number;
   timeOffset: number;
   expectedBlocks: number;
 }
@@ -76,6 +80,54 @@ export interface LiquidPegs {
   date: string;
 }
 
+export interface CurrentPegs {
+  amount: string;
+  lastBlockUpdate: number;
+  hash: string;
+}
+
+export interface PegsVolume {
+  volume: string;
+  number: number;
+}
+
+export interface FederationAddress { 
+  bitcoinaddress: string;
+  balance: string;
+}
+
+export interface FederationUtxo {
+  txid: string;
+  txindex: number;
+  bitcoinaddress: string;
+  amount: number;
+  blocknumber: number;
+  blocktime: number;
+  pegtxid: string;
+  pegindex: number;
+  pegblocktime: number;
+  timelock: number;
+  expiredAt: number;
+  isDust?: boolean;
+}
+
+export interface RecentPeg {
+  txid: string;
+  txindex: number;
+  amount: number;
+  bitcoinaddress: string;
+  bitcointxid: string;
+  bitcoinindex: number;
+  blocktime: number;
+}
+
+export interface AuditStatus {
+  bitcoinBlocks: number;
+  bitcoinHeaders: number;
+  lastBlockAudit: number;
+  isAuditSynced: boolean;
+}
+
 export interface ITranslators { [language: string]: string; }
 
 /**
@@ -83,13 +135,14 @@ export interface ITranslators { [language: string]: string; }
  */
 export interface SinglePoolStats {
   poolId: number;
+  poolUniqueId: number; // unique global pool id
   name: string;
   link: string;
   blockCount: number;
   emptyBlocks: number;
   rank: number;
   share: number;
-  lastEstimatedHashrate: string;
+  lastEstimatedHashrate: number;
   emptyBlockRatio: string;
   logo: string;
   slug: string;
@@ -114,6 +167,7 @@ export interface PoolInfo {
   emptyBlocks: number;
   slug: string;
   poolUniqueId: number;
+  unique_id: number;
 }
 export interface PoolStat {
   pool: PoolInfo;
@@ -149,6 +203,7 @@ export interface BlockExtension {
     id: number;
     name: string;
     slug: string;
+    minerNames: string[] | null;
   }
 }
 
@@ -157,8 +212,11 @@ export interface BlockExtended extends Block {
 }
 
 export interface BlockAudit extends BlockExtended {
+  version: number,
+  unseenTxs?: string[],
   missingTxs: string[],
   addedTxs: string[],
+  prioritizedTxs: string[],
   freshTxs: string[],
   sigopTxs: string[],
   fullrbfTxs: string[],
@@ -181,7 +239,8 @@ export interface TransactionStripped {
   rate?: number; // effective fee rate
   acc?: boolean;
   flags?: number | null;
-  status?: 'found' | 'missing' | 'sigop' | 'fresh' | 'freshcpfp' | 'added' | 'censored' | 'selected' | 'rbf' | 'accelerated';
+  time?: number;
+  status?: 'found' | 'missing' | 'sigop' | 'fresh' | 'freshcpfp' | 'added' | 'added_prioritized' | 'prioritized' | 'added_deprioritized' | 'deprioritized' | 'censored' | 'selected' | 'rbf' | 'accelerated';
   context?: 'projected' | 'actual';
 }
 
@@ -193,7 +252,15 @@ export interface RbfTransaction extends TransactionStripped {
 export interface MempoolPosition {
   block: number,
   vsize: number,
-  accelerated?: boolean
+  accelerated?: boolean,
+  acceleratedBy?: number[],
+  acceleratedAt?: number,
+  feeDelta?: number,
+}
+
+export interface AccelerationPosition extends MempoolPosition {
+  poolId: number;
+  offset?: number;
 }
 
 export interface RewardStats {
@@ -255,6 +322,29 @@ export interface INodesRanking {
   topByChannels: ITopNodesPerChannels[];
 }
 
+export interface INodesStatisticsEntry {
+  added: string;
+  avg_base_fee_mtokens: number; 
+  avg_capacity: number;
+  avg_fee_rate: number;
+  channel_count: number;
+  clearnet_nodes: number;
+  clearnet_tor_nodes: number;
+  id: number; 
+  med_base_fee_mtokens: number;
+  med_capacity: number;
+  med_fee_rate: number;
+  node_count: number;
+  tor_nodes: number;
+  total_capacity: number;
+  unannounced_nodes: number;
+}
+
+export interface INodesStatistics {
+  latest: INodesStatisticsEntry;
+  previous: INodesStatisticsEntry;
+}
+
 export interface IOldestNodes {
   publicKey: string,
   alias: string,
@@ -306,7 +396,7 @@ export interface INode {
 
 export interface Acceleration {
   txid: string;
-  status: 'requested' | 'accelerating' | 'mined' | 'completed' | 'failed';
+  status: 'requested' | 'accelerating' | 'completed_provisional' | 'completed' | 'failed' | 'failed_provisional';
   pools: number[];
   feePaid: number;
   added: number; // timestamp
@@ -319,12 +409,47 @@ export interface Acceleration {
   blockHash: string;
   blockHeight: number;
 
-  actualFeeDelta?: number;
+  acceleratedFeeRate?: number;
+  boost?: number;
+  bidBoost?: number;
+  boostCost?: number;
+  boostRate?: number;
+  minedByPoolUniqueId?: number;
 }
 
 export interface AccelerationHistoryParams {
-  timeframe?: string,
-  status?: string,
-  pool?: string,
-  blockHash?: string,
+  status?: string; // Single status or comma separated list of status
+  timeframe?: string;
+  poolUniqueId?: number;
+  blockHash?: string;
+  blockHeight?: number;
+  page?: number;
+  pageLength?: number;
+}
+
+export interface AccelerationInfo {
+  txid: string,
+  height: number,
+  pool: {
+    id: number,
+    slug: string,
+    name: string,
+  },
+  effective_vsize: number,
+  effective_fee: number,
+  boost_rate: number,
+  boost_cost: number,
+}
+
+export interface TestMempoolAcceptResult {
+  txid: string,
+  wtxid: string,
+  allowed?: boolean,
+  vsize?: number,
+  fees?: {
+    base: number,
+    "effective-feerate": number,
+    "effective-includes": string[],
+  },
+  ['reject-reason']?: string,
 }

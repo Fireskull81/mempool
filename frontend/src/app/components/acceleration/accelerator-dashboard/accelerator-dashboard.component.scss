@@ -7,7 +7,7 @@
 }
 
 .card {
-  background-color: #1d1f31;
+  background-color: var(--bg);
 }
 
 .graph-card {
@@ -17,12 +17,22 @@
   }
 }
 
+.mempool-graph {
+  height: 295px;
+  @media (min-width: 768px) {
+    height: 325px;
+  }
+  @media (min-width: 992px) {
+    height: 409px;
+  }
+}
+
 .card-title {
   font-size: 1rem;
-  color: #4a68b9;
+  color: var(--title-fg);
 }
 .card-title > a {
-  color: #4a68b9;
+  color: var(--title-fg);
 }
 
 .card-body.pool-ranking {
@@ -50,7 +60,8 @@
 
 .main-title {
   position: relative;
-  color: #ffffff91;
+  color: var(--fg);
+  opacity: var(--opacity);
   margin-top: -13px;
   font-size: 10px;
   text-transform: uppercase;
@@ -135,7 +146,12 @@
 }
 
 .card {
-  height: 385px;
+  @media (min-width: 768px) {
+    height: 420px;
+  }
+  @media (min-width: 992px) {
+    height: 510px;
+  }
 }
 .list-card {
   height: 410px;
@@ -145,7 +161,32 @@
 }
 
 .mempool-block-wrapper {
-  max-height: 380px;
-  max-width: 380px;
+  max-height: 430px;
+  max-width: 430px;
   margin: auto;
+
+  @media (min-width: 768px) {
+    max-height: 344px;
+    max-width: 344px;
+  }
+  @media (min-width: 992px) {
+    max-height: 430px;
+    max-width: 430px;
+  }
+}
+
+.widget-toggler {
+  font-size: 12px;
+  position: absolute;
+  top: -20px;
+  right: 3px;
+  text-align: right;
+}
+
+.toggler-option {
+  text-decoration: none;
+}
+
+.inactive {
+  color: #ffffff66;
 }

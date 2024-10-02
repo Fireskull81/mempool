@@ -18,7 +18,7 @@ import { download, formatterXAxis, formatterXAxisLabel } from '../../shared/grap
       position: absolute;
       top: 50%;
       left: calc(50% - 16px);
-      z-index: 100;
+      z-index: 99;
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,8 +35,8 @@ export class MempoolGraphComponent implements OnInit, OnChanges {
   @Input() template: ('widget' | 'advanced') = 'widget';
   @Input() showZoom = true;
   @Input() windowPreferenceOverride: string;
+  @Input() isLoading: boolean;
 
-  isLoading = true;
   mempoolVsizeFeesData: any;
   mempoolVsizeFeesOptions: EChartsOption;
   mempoolVsizeFeesInitOptions = {
@@ -59,13 +59,12 @@ export class MempoolGraphComponent implements OnInit, OnChanges {
     private vbytesPipe: VbytesPipe,
     private wubytesPipe: WuBytesPipe,
     private amountShortenerPipe: AmountShortenerPipe,
-    private stateService: StateService,
+    public stateService: StateService,
     private storageService: StorageService,
     @Inject(LOCALE_ID) private locale: string,
   ) { }
 
   ngOnInit(): void {
-    this.isLoading = true;
     this.inverted = this.storageService.getValue('inverted-graph') === 'true';
     this.isWidget = this.template === 'widget';
     this.showCount = !this.isWidget && !this.hideCount;
@@ -77,7 +76,7 @@ export class MempoolGraphComponent implements OnInit, OnChanges {
     }
     this.isWidget = this.template === 'widget';
     this.showCount = !this.isWidget && !this.hideCount;
-    this.windowPreference = this.windowPreferenceOverride ? this.windowPreferenceOverride : this.storageService.getValue('graphWindowPreference');
+    this.windowPreference = (this.windowPreferenceOverride ? this.windowPreferenceOverride : this.storageService.getValue('graphWindowPreference')) || '2h';
     this.mempoolVsizeFeesData = this.handleNewMempoolData(this.data.concat([]));
     this.mountFeeChart();
   }
@@ -86,7 +85,6 @@ export class MempoolGraphComponent implements OnInit, OnChanges {
     if (!this.data) {
       return;
     }
-    this.isLoading = false;
   }
 
   onChartReady(myChart: any) {
@@ -256,11 +254,17 @@ export class MempoolGraphComponent implements OnInit, OnChanges {
           const itemFormatted = [];
           let sum = 0;
           let progressPercentageText = '';
-          let countItem;
-          let items = this.inverted ? [...params].reverse() : params;
-          if (items[items.length - 1].seriesName === 'count') {
-            countItem = items.pop();
-          }
+          const unfilteredItems = this.inverted ? [...params].reverse() : params;
+          const countItem = unfilteredItems.find(p => p.seriesName === 'count');
+          const usedSeries = {};
+          const items = unfilteredItems.filter(p => {
+            if (usedSeries[p.seriesName] || p.seriesName === 'count') {
+              return false;
+            }
+            usedSeries[p.seriesName] = true;
+            return true;
+          });
+
           items.map((item: any, index: number) => {
             sum += item.value[1];
             const progressPercentage = (item.value[1] / totalValue) * 100;
@@ -411,7 +415,6 @@ export class MempoolGraphComponent implements OnInit, OnChanges {
             padding: [20, 0, 0, 0],
           },
           type: 'time',
-          boundaryGap: false,
           axisLine: { onZero: true },
           axisLabel: {
             margin: 20,
@@ -433,7 +436,7 @@ export class MempoolGraphComponent implements OnInit, OnChanges {
         splitLine: {
           lineStyle: {
             type: 'dotted',
-            color: '#ffffff66',
+            color: 'var(--transparent-fg)',
             opacity: 0.25,
           }
         }
@@ -501,7 +504,7 @@ export class MempoolGraphComponent implements OnInit, OnChanges {
     const now = new Date();
     // @ts-ignore
     this.mempoolVsizeFeesOptions.grid.height = prevHeight + 20;
-    this.mempoolVsizeFeesOptions.backgroundColor = '#11131f';
+    this.mempoolVsizeFeesOptions.backgroundColor = 'var(--active-bg)';
     this.chartInstance.setOption(this.mempoolVsizeFeesOptions);
     download(this.chartInstance.getDataURL({
       pixelRatio: 2,

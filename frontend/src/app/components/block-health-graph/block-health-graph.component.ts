@@ -21,7 +21,7 @@ import { StateService } from '../../services/state.service';
       position: absolute;
       top: 50%;
       left: calc(50% - 15px);
-      z-index: 100;
+      z-index: 99;
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -52,7 +52,7 @@ export class BlockHealthGraphComponent implements OnInit {
     private storageService: StorageService,
     private zone: NgZone,
     private route: ActivatedRoute,
-    private stateService: StateService,
+    public stateService: StateService,
     private router: Router,
   ) {
     this.radioGroupForm = this.formBuilder.group({ dateSpan: '1y' });
@@ -60,7 +60,7 @@ export class BlockHealthGraphComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.seoService.setTitle($localize`:@@d7d5fcf50179ad70c938491c517efb82de2c8146:Block Health`);
+    this.seoService.setTitle($localize`:@@b1fa5b210c9670d49a6506f046d4a0c2797fd402:Block Health`);
     this.seoService.setDescription($localize`:@@meta.description.bitcoin.graphs.block-health:See Bitcoin block health visualized over time. Block health is a measure of how many expected transactions were included in an actual mined block. Expected transactions are determined using Mempool's re-implementation of Bitcoin Core's transaction selection algorithm.`);
     this.miningWindowPreference = '24h';//this.miningService.getDefaultTimespan('24h');
     this.radioGroupForm = this.formBuilder.group({ dateSpan: this.miningWindowPreference });
@@ -131,7 +131,7 @@ export class BlockHealthGraphComponent implements OnInit {
         borderRadius: 4,
         shadowColor: 'rgba(0, 0, 0, 0.5)',
         textStyle: {
-          color: '#b1b1b1',
+          color: 'var(--tooltip-grey)',
           align: 'left',
         },
         borderColor: '#000',
@@ -178,7 +178,7 @@ export class BlockHealthGraphComponent implements OnInit {
           splitLine: {
             lineStyle: {
               type: 'dotted',
-              color: '#ffffff66',
+              color: 'var(--transparent-fg)',
               opacity: 0.25,
             }
           },
@@ -187,7 +187,7 @@ export class BlockHealthGraphComponent implements OnInit {
       series: data.length === 0 ? undefined : [
         {
           zlevel: 0,
-          name: $localize`Health`,
+          name: $localize`:@@d2bcd3296d2850de762fb943060b7e086a893181:Health`,
           data: data.map(health => ({
             value: health[2],
             block: health[1],
@@ -290,7 +290,7 @@ export class BlockHealthGraphComponent implements OnInit {
     const now = new Date();
     // @ts-ignore
     this.chartOptions.grid.bottom = 40;
-    this.chartOptions.backgroundColor = '#11131f';
+    this.chartOptions.backgroundColor = 'var(--active-bg)';
     this.chartInstance.setOption(this.chartOptions);
     download(this.chartInstance.getDataURL({
       pixelRatio: 2,

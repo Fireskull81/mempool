@@ -1,3 +1,4 @@
+import { IBitcoinApi, TestMempoolAcceptResult } from './bitcoin-api.interface';
 import { IEsploraApi } from './esplora-api.interface';
 
 export interface AbstractBitcoinApi {
@@ -21,13 +22,16 @@ export interface AbstractBitcoinApi {
   $getScriptHash(scripthash: string): Promise<IEsploraApi.ScriptHash>;
   $getScriptHashTransactions(address: string, lastSeenTxId: string): Promise<IEsploraApi.Transaction[]>;
   $sendRawTransaction(rawTransaction: string): Promise<string>;
+  $testMempoolAccept(rawTransactions: string[], maxfeerate?: number): Promise<TestMempoolAcceptResult[]>;
   $getOutspend(txId: string, vout: number): Promise<IEsploraApi.Outspend>;
   $getOutspends(txId: string): Promise<IEsploraApi.Outspend[]>;
   $getBatchedOutspends(txId: string[]): Promise<IEsploraApi.Outspend[][]>;
   $getBatchedOutspendsInternal(txId: string[]): Promise<IEsploraApi.Outspend[][]>;
   $getOutSpendsByOutpoint(outpoints: { txid: string, vout: number }[]): Promise<IEsploraApi.Outspend[]>;
+  $getCoinbaseTx(blockhash: string): Promise<IEsploraApi.Transaction>;
 
   startHealthChecks(): void;
+  getHealthStatus(): HealthCheckHost[];
 }
 export interface BitcoinRpcCredentials {
   host: string;
@@ -36,4 +40,16 @@ export interface BitcoinRpcCredentials {
   pass: string;
   timeout: number;
   cookie?: string;
+}
+
+export interface HealthCheckHost {
+  host: string;
+  active: boolean;
+  rtt: number;
+  latestHeight: number;
+  socket: boolean;
+  outOfSync: boolean;
+  unreachable: boolean;
+  checked: boolean;
+  lastChecked: number;
 }

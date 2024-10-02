@@ -2,23 +2,28 @@ import config from '../config';
 import logger from '../logger';
 import { MempoolTransactionExtended, MempoolBlockWithTransactions } from '../mempool.interfaces';
 import rbfCache from './rbf-cache';
+import transactionUtils from './transaction-utils';
 
 const PROPAGATION_MARGIN = 180; // in seconds, time since a transaction is first seen after which it is assumed to have propagated to all miners
 
 class Audit {
-  auditBlock(transactions: MempoolTransactionExtended[], projectedBlocks: MempoolBlockWithTransactions[], mempool: { [txId: string]: MempoolTransactionExtended }, useAccelerations: boolean = false)
-   : { censored: string[], added: string[], fresh: string[], sigop: string[], fullrbf: string[], accelerated: string[], score: number, similarity: number } {
+  auditBlock(height: number, transactions: MempoolTransactionExtended[], projectedBlocks: MempoolBlockWithTransactions[], mempool: { [txId: string]: MempoolTransactionExtended })
+   : { unseen: string[], censored: string[], added: string[], prioritized: string[], fresh: string[], sigop: string[], fullrbf: string[], accelerated: string[], score: number, similarity: number } {
     if (!projectedBlocks?.[0]?.transactionIds || !mempool) {
-      return { censored: [], added: [], fresh: [], sigop: [], fullrbf: [], accelerated: [], score: 1, similarity: 1 };
+      return { unseen: [], censored: [], added: [], prioritized: [], fresh: [], sigop: [], fullrbf: [], accelerated: [], score: 1, similarity: 1 };
     }
 
     const matches: string[] = []; // present in both mined block and template
     const added: string[] = []; // present in mined block, not in template
+    const unseen: string[] = []; // present in the mined block, not in our mempool
+    let prioritized: string[] = []; // higher in the block than would be expected by in-band feerate alone
+    let deprioritized: string[] = []; // lower in the block than would be expected by in-band feerate alone
     const fresh: string[] = []; // missing, but firstSeen or lastBoosted within PROPAGATION_MARGIN
     const rbf: string[] = []; // either missing or present, and either part of a full-rbf replacement, or a conflict with the mined block
     const accelerated: string[] = []; // prioritized by the mempool accelerator
     const isCensored = {}; // missing, without excuse
     const isDisplaced = {};
+    const isAccelerated = {};
     let displacedWeight = 0;
     let matchedWeight = 0;
     let projectedWeight = 0;
@@ -31,6 +36,7 @@ class Audit {
       inBlock[tx.txid] = tx;
       if (mempool[tx.txid] && mempool[tx.txid].acceleration) {
         accelerated.push(tx.txid);
+        isAccelerated[tx.txid] = true;
       }
     }
     // coinbase is always expected
@@ -68,20 +74,23 @@ class Audit {
 
     // we can expect an honest miner to include 'displaced' transactions in place of recent arrivals and censored txs
     // these displaced transactions should occupy the first N weight units of the next projected block
-    let displacedWeightRemaining = displacedWeight;
+    let displacedWeightRemaining = displacedWeight + 4000;
     let index = 0;
     let lastFeeRate = Infinity;
     let failures = 0;
-    while (projectedBlocks[1] && index < projectedBlocks[1].transactionIds.length && failures < 500) {
-      const txid = projectedBlocks[1].transactionIds[index];
+    let blockIndex = 1;
+    while (projectedBlocks[blockIndex] && failures < 500) {
+      const txid = projectedBlocks[blockIndex].transactionIds[index];
       const tx = mempool[txid];
       if (tx) {
         const fits = (tx.weight - displacedWeightRemaining) < 4000;
-        const feeMatches = tx.effectiveFeePerVsize >= lastFeeRate;
+        // 0.005 margin of error for any remaining vsize rounding issues
+        const feeMatches = tx.effectiveFeePerVsize >= (lastFeeRate - 0.005);
         if (fits || feeMatches) {
           isDisplaced[txid] = true;
           if (fits) {
-            lastFeeRate = Math.min(lastFeeRate, tx.effectiveFeePerVsize);
+            // (tx.effectiveFeePerVsize * tx.vsize) / Math.ceil(tx.vsize) attempts to correct for vsize rounding in the simple non-CPFP case
+            lastFeeRate = Math.min(lastFeeRate, (tx.effectiveFeePerVsize * tx.vsize) / Math.ceil(tx.vsize));
           }
           if (tx.firstSeen == null || (now - (tx?.firstSeen || 0)) > PROPAGATION_MARGIN) {
             displacedWeightRemaining -= tx.weight;
@@ -94,6 +103,10 @@ class Audit {
         logger.warn('projected transaction missing from mempool cache');
       }
       index++;
+      if (index >= projectedBlocks[blockIndex].transactionIds.length) {
+        index = 0;
+        blockIndex++;
+      }
     }
 
     // mark unexpected transactions in the mined block as 'added'
@@ -105,13 +118,24 @@ class Audit {
       } else {
         if (rbfCache.has(tx.txid)) {
           rbf.push(tx.txid);
-        } else if (!isDisplaced[tx.txid]) {
-          added.push(tx.txid);
+          if (!mempool[tx.txid] && !rbfCache.getReplacedBy(tx.txid)) {
+            unseen.push(tx.txid);
+          }
+        } else {
+          if (mempool[tx.txid]) {
+            if (isDisplaced[tx.txid]) {
+              added.push(tx.txid);
+            }
+          } else {
+            unseen.push(tx.txid);
+          }
         }
         overflowWeight += tx.weight;
       }
       totalWeight += tx.weight;
     }
+
+    ({ prioritized, deprioritized } = transactionUtils.identifyPrioritizedTransactions(transactions, 'effectiveFeePerVsize'));
 
     // transactions missing from near the end of our template are probably not being censored
     let overflowWeightRemaining = overflowWeight - (config.MEMPOOL.BLOCK_WEIGHT_UNITS - totalWeight);
@@ -153,8 +177,10 @@ class Audit {
     const similarity = projectedWeight ? matchedWeight / projectedWeight : 1;
 
     return {
+      unseen,
       censored: Object.keys(isCensored),
       added,
+      prioritized,
       fresh,
       sigop: [],
       fullrbf: rbf,

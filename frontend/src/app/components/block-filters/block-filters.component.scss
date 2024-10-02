@@ -24,7 +24,6 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    float: right;
 
     &:hover, &:active {
       text-decoration: none;
@@ -32,19 +31,28 @@
   }
 
   .menu-toggle {
-    width: 2em;
-    height: 2em;
+    width: 3em;
+    min-width: 3em;
+    height: 1.8em;
     padding: 0px 1px;
     opacity: 0;
     cursor: pointer;
     color: white;
     background: none;
-    border: solid 2px white;
+    border: none;
     border-radius: 0.35em;
     pointer-events: all;
+    align-self: normal;
   }
 
   .filter-menu {
+    .filter-row {
+      display: flex;
+      flex-direction: row;
+      justify-content: start;
+      align-items: baseline;
+    }
+
     h5 {
       font-size: 0.8rem;
       color: white;
@@ -64,7 +72,7 @@
   .filter-tag {
     font-size: 0.9em;
     background: #181b2daf;
-    border: solid 1px #105fb0;
+    border: solid 1px var(--primary);
     color: white;
     border-radius: 0.2rem;
     padding: 0.2em 0.5em;
@@ -73,14 +81,63 @@
     pointer-events: all;
 
     &.selected {
-      background-color: #105fb0;
+      background-color: var(--primary);
+    }
+  }
+
+  &.any-mode {
+    .filter-tag {
+      border: solid 1px var(--success);
+      &.selected {
+        background-color: var(--success);
+      }
+    }
+  }
+
+  .btn-group {
+    font-size: 0.9em;
+    margin-right: 0.25em;
+  }
+
+  .mode-toggle {
+    padding: 0.2em 0.5em;
+    pointer-events: all;
+    line-height: 1.5;
+    background: #181b2daf;
+
+    &:first-child {
+      border-top-left-radius: 0.2rem;
+      border-bottom-left-radius: 0.2rem;
+    }
+    &:last-child {
+      border-top-right-radius: 0.2rem;
+      border-bottom-right-radius: 0.2rem;
+    }
+
+    &.blue {
+      border: solid 1px var(--primary);
+      &.active {
+        background: var(--primary);
+      }
+    }
+    &.green {
+      border: solid 1px var(--success);
+      &.active {
+        background: var(--success);
+      }
+    }
+    &.yellow {
+      border: solid 1px #bf7815;
+      &.active {
+        background: #bf7815;
+      }
     }
   }
 
   :host-context(.block-overview-graph:hover) &, &:hover, &:active {
     .menu-toggle {
       opacity: 0.5;
-      background: #181b2d;
+      background: var(--stat-box-bg);
 
       &:hover {
         opacity: 1;
@@ -131,6 +188,11 @@
     }
     .filter-tag {
       font-size: 0.7em;
+    }
+    .mode-toggle {
+      font-size: 0.7em;
+      margin-bottom: 5px;
+      margin-top: 2px;
     }
   }
 

@@ -30,8 +30,10 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
   officialMempoolInstance: boolean;
   auditEnabled: boolean;
   mobileViewport: boolean = false;
+  showMobileEnterpriseUpsell: boolean = true;
   timeLtrSubscription: Subscription;
   timeLtr: boolean = this.stateService.timeLtr.value;
+  isMempoolSpaceBuild = this.stateService.isMempoolSpaceBuild;
 
   @ViewChildren(FaqTemplateDirective) faqTemplates: QueryList<FaqTemplateDirective>;
   dict = {};
@@ -55,7 +57,10 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
       if( this.route.snapshot.fragment ) {
         this.openEndpointContainer( this.route.snapshot.fragment );
         if (document.getElementById( this.route.snapshot.fragment )) {
-          document.getElementById( this.route.snapshot.fragment ).scrollIntoView();
+          let vOffset = ( window.innerWidth <= 992 ) ? 100 : 60;
+          window.scrollTo({
+            top: document.getElementById( this.route.snapshot.fragment ).offsetTop - vOffset
+          });
         }
       }
       window.addEventListener('scroll', that.onDocScroll, { passive: true });
@@ -68,7 +73,7 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
     this.auditEnabled = this.env.AUDIT;
     this.network$ = merge(of(''), this.stateService.networkChanged$).pipe(
       tap((network: string) => {
-        if (this.env.BASE_MODULE === 'mempool' && network !== '') {
+        if (this.env.BASE_MODULE === 'mempool' && network !== '' && this.env.ROOT_NETWORK === '') {
           this.baseNetworkUrl = `/${network}`;
         } else if (this.env.BASE_MODULE === 'liquid') {
           if (!['', 'liquid'].includes(network)) {
@@ -98,6 +103,8 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
           this.electrsPort = 50002; break;
         case "testnet":
           this.electrsPort = 60002; break;
+        case "testnet4":
+          this.electrsPort = 40002; break;
         case "signet":
           this.electrsPort = 60602; break;
         case "liquid":
@@ -123,20 +130,13 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
     this.desktopDocsNavPosition = ( window.pageYOffset > 115 ) ? "fixed" : "relative";
   }
 
-  anchorLinkClick( event: any ) {
-    let targetId = "";
-    if( event.target.nodeName === "A" ) {
-      targetId = event.target.hash.substring(1);
-    } else {
-      let element = event.target;
-      while( element.nodeName !== "A" ) {
-        element = element.parentElement;
-      }
-      targetId = element.hash.substring(1);
-    }
-    if( this.route.snapshot.fragment === targetId && document.getElementById( targetId )) {
-      document.getElementById( targetId ).scrollIntoView();
-    }
+  anchorLinkClick( e ) {
+    let targetId = e.fragment;
+    let vOffset = ( window.innerWidth <= 992 ) ? 100 : 60;
+    window.scrollTo({
+      top: document.getElementById( targetId ).offsetTop - vOffset
+    });
+    window.history.pushState({}, null, document.location.href.split("#")[0] + "#" + targetId);
     this.openEndpointContainer( targetId );
   }
 
@@ -173,6 +173,9 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
     if (network === 'testnet') {
       curlResponse = code.codeSampleTestnet.curl;
     }
+    if (network === 'testnet4') {
+      curlResponse = code.codeSampleTestnet.curl;
+    }
     if (network === 'signet') {
       curlResponse = code.codeSampleSignet.curl;
     }
@@ -182,10 +185,6 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
     if (network === 'liquidtestnet') {
       curlResponse = code.codeSampleLiquidTestnet.curl;
     }
-    if (network === 'bisq') {
-      curlResponse = code.codeSampleBisq.curl;
-    }
-
     let curlNetwork = '';
     if (this.env.BASE_MODULE === 'mempool') {
       if (!['', 'mainnet'].includes(network)) {
@@ -195,6 +194,10 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
       if (!['', 'liquid'].includes(network)) {
         curlNetwork = `/${network}`;
       }
+    }
+
+    if (network === this.env.ROOT_NETWORK) {
+      curlNetwork = '';
     }
 
     let text = code.codeTemplate.curl;

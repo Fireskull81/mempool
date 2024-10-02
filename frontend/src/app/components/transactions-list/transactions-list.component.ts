@@ -10,6 +10,7 @@ import { filter, map, tap, switchMap, shareReplay, catchError } from 'rxjs/opera
 import { BlockExtended } from '../../interfaces/node-api.interface';
 import { ApiService } from '../../services/api.service';
 import { PriceService } from '../../services/price.service';
+import { StorageService } from '../../services/storage.service';
 
 @Component({
   selector: 'app-transactions-list',
@@ -32,11 +33,14 @@ export class TransactionsListComponent implements OnInit, OnChanges {
   @Input() outputIndex: number;
   @Input() address: string = '';
   @Input() rowLimit = 12;
+  @Input() blockTime: number = 0; // Used for price calculation if all the transactions are in the same block
 
   @Output() loadMore = new EventEmitter();
 
   latestBlock$: Observable<BlockExtended>;
   outspendsSubscription: Subscription;
+  currencyChangeSubscription: Subscription;
+  currency: string;
   refreshOutspends$: ReplaySubject<string[]> = new ReplaySubject();
   refreshChannels$: ReplaySubject<string[]> = new ReplaySubject();
   showDetails$ = new BehaviorSubject<boolean>(false);
@@ -44,6 +48,8 @@ export class TransactionsListComponent implements OnInit, OnChanges {
   transactionsLength: number = 0;
   inputRowLimit: number = 12;
   outputRowLimit: number = 12;
+  showFullScript: { [vinIndex: number]: boolean } = {};
+  showFullWitness: { [vinIndex: number]: { [witnessIndex: number]: boolean } } = {};
 
   constructor(
     public stateService: StateService,
@@ -53,6 +59,7 @@ export class TransactionsListComponent implements OnInit, OnChanges {
     private assetsService: AssetsService,
     private ref: ChangeDetectorRef,
     private priceService: PriceService,
+    private storageService: StorageService,
   ) { }
 
   ngOnInit(): void {
@@ -107,7 +114,7 @@ export class TransactionsListComponent implements OnInit, OnChanges {
         ),
         this.refreshChannels$
           .pipe(
-            filter(() => this.stateService.env.LIGHTNING),
+            filter(() => this.stateService.networkSupportsLightning()),
             switchMap((txIds) => this.apiService.getChannelByTxIds$(txIds)),
             catchError((error) => {
               // handle 404
@@ -125,6 +132,35 @@ export class TransactionsListComponent implements OnInit, OnChanges {
           )
         ,
     ).subscribe(() => this.ref.markForCheck());
+
+    this.currencyChangeSubscription = this.stateService.fiatCurrency$
+    .subscribe(currency => {
+      this.currency = currency;
+      this.refreshPrice();
+    });
+  }
+
+  refreshPrice(): void {
+    // Loop over all transactions
+    if (!this.transactions || !this.transactions.length || !this.currency) {
+      return;
+    }
+    const confirmedTxs = this.transactions.filter((tx) => tx.status.confirmed).length;
+    if (!this.blockTime) {
+      this.transactions.forEach((tx) => {
+        if (!this.blockTime) {
+          if (tx.status.block_time) {
+            this.priceService.getBlockPrice$(tx.status.block_time, confirmedTxs < 3, this.currency).pipe(
+              tap((price) => tx['price'] = price),
+            ).subscribe();
+          }
+        }
+      });
+    } else {
+      this.priceService.getBlockPrice$(this.blockTime, true, this.currency).pipe(
+        tap((price) => this.transactions?.forEach((tx) => tx['price'] = price)),
+      ).subscribe();
+    }
   }
 
   ngOnChanges(changes): void {
@@ -148,6 +184,7 @@ export class TransactionsListComponent implements OnInit, OnChanges {
       this.transactionsLength = this.transactions.length;
       this.cacheService.setTxCache(this.transactions);
 
+      const confirmedTxs = this.transactions.filter((tx) => tx.status.confirmed).length;
       this.transactions.forEach((tx) => {
         tx['@voutLimit'] = true;
         tx['@vinLimit'] = true;
@@ -197,15 +234,23 @@ export class TransactionsListComponent implements OnInit, OnChanges {
           }
         }
 
-        this.priceService.getBlockPrice$(tx.status.block_time).pipe(
-          tap((price) => tx['price'] = price)
-        ).subscribe();
+        if (!this.blockTime && tx.status.block_time && this.currency) {
+          this.priceService.getBlockPrice$(tx.status.block_time, confirmedTxs < 3, this.currency).pipe(
+            tap((price) => tx['price'] = price),
+          ).subscribe();
+        }
       });
+
+      if (this.blockTime && this.transactions?.length && this.currency) {
+        this.priceService.getBlockPrice$(this.blockTime, true, this.currency).pipe(
+          tap((price) => this.transactions?.forEach((tx) => tx['price'] = price)),
+        ).subscribe();
+      }
       const txIds = this.transactions.filter((tx) => !tx._outspends).map((tx) => tx.txid);
       if (txIds.length && !this.cached) {
         this.refreshOutspends$.next(txIds);
       }
-      if (this.stateService.env.LIGHTNING) {
+      if (this.stateService.networkSupportsLightning()) {
         const txIds = this.transactions.filter((tx) => !tx._channels).map((tx) => tx.txid);
         if (txIds.length) {
           this.refreshChannels$.next(txIds);
@@ -230,8 +275,11 @@ export class TransactionsListComponent implements OnInit, OnChanges {
     if (this.network === 'liquid' || this.network === 'liquidtestnet') {
       return;
     }
-    const oldvalue = !this.stateService.viewFiat$.value;
-    this.stateService.viewFiat$.next(oldvalue);
+    const modes = ['btc', 'sats', 'fiat'];
+    const oldIndex = modes.indexOf(this.stateService.viewAmountMode$.value);
+    const newIndex = (oldIndex + 1) % modes.length;
+    this.stateService.viewAmountMode$.next(modes[newIndex] as 'btc' | 'sats' | 'fiat');
+    this.storageService.setValue('view-amount-mode', modes[newIndex]);
   }
 
   trackByFn(index: number, tx: Transaction): string {
@@ -254,7 +302,17 @@ export class TransactionsListComponent implements OnInit, OnChanges {
   toggleDetails(): void {
     if (this.showDetails$.value === true) {
       this.showDetails$.next(false);
+      this.showFullScript = {};
+      this.showFullWitness = {};
     } else {
+      this.showFullScript = this.transactions[0] ? this.transactions[0].vin.reduce((acc, _, i) => ({...acc, [i]: false}), {}) : {};
+      this.showFullWitness = this.transactions[0] ? this.transactions[0].vin.reduce((acc, vin, vinIndex) => {
+        acc[vinIndex] = vin.witness ? vin.witness.reduce((witnessAcc, _, witnessIndex) => {
+          witnessAcc[witnessIndex] = false;
+          return witnessAcc;
+        }, {}) : {};
+        return acc;
+      }, {}) : {};
       this.showDetails$.next(true);
     }
   }
@@ -306,7 +364,16 @@ export class TransactionsListComponent implements OnInit, OnChanges {
     return limit;
   }
 
+  toggleShowFullScript(vinIndex: number): void {
+    this.showFullScript[vinIndex] = !this.showFullScript[vinIndex];
+  }
+
+  toggleShowFullWitness(vinIndex: number, witnessIndex: number): void {
+    this.showFullWitness[vinIndex][witnessIndex] = !this.showFullWitness[vinIndex][witnessIndex];
+  }
+
   ngOnDestroy(): void {
     this.outspendsSubscription.unsubscribe();
+    this.currencyChangeSubscription?.unsubscribe();
   }
 }

@@ -1,15 +1,16 @@
-import { Component, ComponentRef, ViewChild, HostListener, Input, Output, EventEmitter,
+import { Component, ViewChild, Input, Output, EventEmitter,
   OnInit, OnDestroy, OnChanges, ChangeDetectionStrategy, ChangeDetectorRef, AfterViewInit } from '@angular/core';
 import { StateService } from '../../services/state.service';
-import { MempoolBlockDelta, TransactionStripped } from '../../interfaces/websocket.interface';
+import { MempoolBlockDelta, isMempoolDelta } from '../../interfaces/websocket.interface';
+import { TransactionStripped } from '../../interfaces/node-api.interface';
 import { BlockOverviewGraphComponent } from '../../components/block-overview-graph/block-overview-graph.component';
-import { Subscription, BehaviorSubject, merge, of } from 'rxjs';
-import { switchMap, filter } from 'rxjs/operators';
+import { Subscription, BehaviorSubject } from 'rxjs';
 import { WebsocketService } from '../../services/websocket.service';
 import { RelativeUrlPipe } from '../../shared/pipes/relative-url/relative-url.pipe';
 import { Router } from '@angular/router';
 import { Color } from '../block-overview-graph/sprite-types';
 import TxView from '../block-overview-graph/tx-view';
+import { FilterMode, GradientMode } from '../../shared/filters.utils';
 
 @Component({
   selector: 'app-mempool-block-overview',
@@ -18,23 +19,25 @@ import TxView from '../block-overview-graph/tx-view';
 })
 export class MempoolBlockOverviewComponent implements OnInit, OnDestroy, OnChanges, AfterViewInit {
   @Input() index: number;
+  @Input() resolution = 86;
   @Input() showFilters: boolean = false;
   @Input() overrideColors: ((tx: TxView) => Color) | null = null;
+  @Input() filterFlags: bigint | undefined = undefined;
+  @Input() filterMode: FilterMode = 'and';
+  @Input() gradientMode: GradientMode = 'fee';
   @Output() txPreviewEvent = new EventEmitter<TransactionStripped | void>();
 
   @ViewChild('blockGraph') blockGraph: BlockOverviewGraphComponent;
 
   lastBlockHeight: number;
   blockIndex: number;
-  isLoading$ = new BehaviorSubject<boolean>(true);
+  isLoading$ = new BehaviorSubject<boolean>(false);
   timeLtrSubscription: Subscription;
   timeLtr: boolean;
   chainDirection: string = 'right';
   poolDirection: string = 'left';
 
   blockSub: Subscription;
-  deltaSub: Subscription;
-
   firstLoad: boolean = true;
 
   constructor(
@@ -54,19 +57,21 @@ export class MempoolBlockOverviewComponent implements OnInit, OnDestroy, OnChang
   }
 
   ngAfterViewInit(): void {
-    this.blockSub = merge(
-        of(true),
-        this.stateService.connectionState$.pipe(filter((state) => state === 2))
-      )
-      .pipe(switchMap(() => this.stateService.mempoolBlockTransactions$))
-      .subscribe((transactionsStripped) => {
+    this.blockSub = this.stateService.mempoolBlockUpdate$.subscribe((update) => {
+      // process update
+      if (isMempoolDelta(update)) {
+        // delta
+        this.updateBlock(update);
+      } else {
+        const transactionsStripped = update.transactions;
+        // new transactions
         if (this.firstLoad) {
           this.replaceBlock(transactionsStripped);
         } else {
           const inOldBlock = {};
           const inNewBlock = {};
           const added: TransactionStripped[] = [];
-          const changed: { txid: string, rate: number | undefined, acc: boolean | undefined }[] = [];
+          const changed: { txid: string, rate: number | undefined, flags: number, acc: boolean | undefined }[] = [];
           const removed: string[] = [];
           for (const tx of transactionsStripped) {
             inNewBlock[tx.txid] = true;
@@ -84,19 +89,19 @@ export class MempoolBlockOverviewComponent implements OnInit, OnDestroy, OnChang
               changed.push({
                 txid: tx.txid,
                 rate: tx.rate,
+                flags: tx.flags,
                 acc: tx.acc
               });
             }
           }
           this.updateBlock({
+            block: this.blockIndex,
             removed,
             changed,
             added
           });
         }
-      });
-    this.deltaSub = this.stateService.mempoolBlockDelta$.subscribe((delta) => {
-      this.updateBlock(delta);
+      }
     });
   }
 
@@ -106,14 +111,16 @@ export class MempoolBlockOverviewComponent implements OnInit, OnDestroy, OnChang
       if (this.blockGraph) {
         this.blockGraph.clear(changes.index.currentValue > changes.index.previousValue ? this.chainDirection : this.poolDirection);
       }
-      this.isLoading$.next(true);
-      this.websocketService.startTrackMempoolBlock(changes.index.currentValue);
+      if (!this.websocketService.startTrackMempoolBlock(changes.index.currentValue) && this.stateService.mempoolBlockState && this.stateService.mempoolBlockState.block === changes.index.currentValue) {
+        this.resumeBlock(Object.values(this.stateService.mempoolBlockState.transactions));
+      } else {
+        this.isLoading$.next(true);
+      }
     }
   }
 
   ngOnDestroy(): void {
     this.blockSub.unsubscribe();
-    this.deltaSub.unsubscribe();
     this.timeLtrSubscription.unsubscribe();
     this.websocketService.stopTrackMempoolBlock();
   }
@@ -138,12 +145,29 @@ export class MempoolBlockOverviewComponent implements OnInit, OnDestroy, OnChang
       const direction = (this.blockIndex == null || this.index < this.blockIndex) ? this.poolDirection : this.chainDirection;
       this.blockGraph.replace(delta.added, direction);
     } else {
-      this.blockGraph.update(delta.added, delta.removed, delta.changed || [], blockMined ? this.chainDirection : this.poolDirection, blockMined);
+      if (blockMined) {
+        this.blockGraph.update(delta.added, delta.removed, delta.changed || [], blockMined ? this.chainDirection : this.poolDirection, blockMined);
+      } else {
+        this.blockGraph.deferredUpdate(delta.added, delta.removed, delta.changed || [], this.poolDirection);
+      }
     }
 
     this.lastBlockHeight = this.stateService.latestBlockHeight;
     this.blockIndex = this.index;
     this.isLoading$.next(false);
+  }
+
+  resumeBlock(transactionsStripped: TransactionStripped[]): void {
+    if (this.blockGraph) {
+      this.firstLoad = false;
+      this.blockGraph.setup(transactionsStripped, true);
+      this.blockIndex = this.index;
+      this.isLoading$.next(false);
+    } else {
+      requestAnimationFrame(() => {
+        this.resumeBlock(transactionsStripped);
+      });
+    }
   }
 
   onTxClick(event: { tx: TransactionStripped, keyModifier: boolean }): void {

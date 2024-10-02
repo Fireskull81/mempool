@@ -19,6 +19,38 @@
   pointer-events: none;
 }
 
+.on-pool-name-text {
+  display: inline-block;
+  padding-top: 2px;
+  font-weight: normal;
+}
+
+
+.on-pool {
+  align-items: center;
+  background-color: var(--bg);
+  display: inline-block;
+  margin-top: 4px;
+  padding: .25em .4em;
+  border-radius: .25rem;
+}
+
+.on-pool-container {
+  align-items: center;
+  position: relative;
+  top: -8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.on-pool-container.selected {
+  top: 0px;
+}
+
+.pool-container {
+  margin-top: 12px;
+}
+
 .mined-block {
   position: absolute;
   top: 0px;
@@ -63,7 +95,7 @@
 .fee-span {
   font-size: 11px;
   margin-bottom: 5px;
-  color: #fff000;
+  color: var(--yellow);
 }
 
 .transaction-count {
@@ -117,20 +149,20 @@
 }
 
 .black-background {
-  background-color: #11131f;
+  background-color: var(--active-bg);
   z-index: 100;
   position: relative;
 }
 
 #arrow-up {
   position: relative;
-  left: 30px;
-  top: 140px;
+  left: calc(var(--block-size) * 0.6);
+  top: calc(var(--block-size) * 1.28);
   width: 0;
   height: 0;
-  border-left: 35px solid transparent;
-  border-right: 35px solid transparent;
-  border-bottom: 35px solid #FFF;
+  border-left: calc(var(--block-size) * 0.2) solid transparent;
+  border-right: calc(var(--block-size) * 0.2) solid transparent;
+  border-bottom: calc(var(--block-size) * 0.2) solid var(--fg);
 }
 
 .flashing {
@@ -144,7 +176,7 @@
 }
 
 .loading .bitcoin-block.mined-block {
-  background: #2d3348;
+  background: var(--secondary);
 }
 
 @keyframes opacityPulse {
@@ -155,19 +187,33 @@
 
 .badge {
   position: relative;
-  top: 15px;
+  top: 19px;
   z-index: 101;
+  color: #FFF;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 145px;
+
+  &.miner-name {
+    max-width: 125px;
+  }
+}
+
+.pool-logo {
+  width: 15px;
+  height: 15px;
+  position: relative;
+  top: -1px;
+  margin-right: 2px;
+}
+
+.pool-logo.faded {
+  filter: grayscale(100%) brightness(1.5);
 }
 
 .animated {
   transition: all 0.15s ease-in-out;
-}
-.show {
-  opacity: 1;
-}
-.hide {
-  opacity: 0;
-  pointer-events : none;
+  white-space: nowrap;
 }
 
 .time-ltr {
