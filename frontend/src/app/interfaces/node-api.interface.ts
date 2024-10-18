@@ -1,4 +1,4 @@
-import { AddressTxSummary, Block, Transaction } from "./electrs.interface";
+import { Block, Transaction } from "./electrs.interface";
 
 export interface OptimizedMempoolStats {
   added: number;
@@ -470,9 +470,4 @@ export interface TxResult {
     "effective-includes"?: string[];
   };
   error?: string;
-}
-export interface WalletAddress {
-  address: string;
-  active: boolean;
-  transactions?: AddressTxSummary[];
 }

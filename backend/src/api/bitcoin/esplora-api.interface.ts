@@ -179,11 +179,4 @@ export namespace IEsploraApi {
     burn_count: number;
   }
 
-  export interface AddressTxSummary {
-    txid: string;
-    value: number;
-    height: number;
-    time: number;
-    tx_position?: number;
-  }
 }

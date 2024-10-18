@@ -27,7 +27,6 @@ import mempool from './mempool';
 import statistics from './statistics/statistics';
 import accelerationRepository from '../repositories/AccelerationRepository';
 import bitcoinApi from './bitcoin/bitcoin-api-factory';
-import walletApi from './services/wallets';
 
 interface AddressTransactions {
   mempool: MempoolTransactionExtended[],
@@ -305,14 +304,6 @@ class WebsocketHandler {
               client['track-scriptpubkeys'] = spks;
             } else {
               client['track-scriptpubkeys'] = null;
-            }
-          }
-
-          if (parsedMessage && parsedMessage['track-wallet']) {
-            if (parsedMessage['track-wallet'] === 'stop') {
-              client['track-wallet'] = null;
-            } else {
-              client['track-wallet'] = parsedMessage['track-wallet'];
             }
           }
 
@@ -1121,9 +1112,6 @@ class WebsocketHandler {
       replaced: replacedTransactions,
     };
 
-    // check for wallet transactions
-    const walletTransactions = config.WALLETS.ENABLED ? walletApi.processBlock(block, transactions) : [];
-
     const responseCache = { ...this.socketData };
     function getCachedResponse(key, data): string {
       if (!responseCache[key]) {
@@ -1326,11 +1314,6 @@ class WebsocketHandler {
 
       if (client['track-mempool']) {
         response['mempool-transactions'] = getCachedResponse('mempool-transactions', mempoolDelta);
-      }
-
-      if (client['track-wallet']) {
-        const trackedWallet = client['track-wallet'];
-        response['wallet-transactions'] = getCachedResponse(`wallet-transactions-${trackedWallet}`, walletTransactions[trackedWallet] ?? {});
       }
 
       if (Object.keys(response).length) {
