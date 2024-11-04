@@ -183,7 +183,7 @@ class MiningRoutes {
   private async $getHistoricalHashrate(req: Request, res: Response) {
     let currentHashrate = 0, currentDifficulty = 0;
     try {
-      currentHashrate = await bitcoinClient.getNetworkHashPs();
+      currentHashrate = await bitcoinClient.getNetworkHashPs(1008);
       currentDifficulty = await bitcoinClient.getDifficulty();
     } catch (e) {
       logger.debug('Bitcoin Core is not available, using zeroed value for current hashrate and difficulty');
@@ -459,7 +459,7 @@ class MiningRoutes {
         handleError(req, res, 400, 'Acceleration data is not available.');
         return;
       }
-      res.status(200).send(accelerationApi.accelerations || []);
+      res.status(200).send(Object.values(accelerationApi.getAccelerations() || {}));
     } catch (e) {
       handleError(req, res, 500, e instanceof Error ? e.message : e);
     }
