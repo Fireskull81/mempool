@@ -267,7 +267,7 @@
             }
           </div>
           @if (hasCpfp) {
-            <button type="button" class="btn btn-outline-info btn-sm btn-small-height float-right" (click)="toggleCpfp()">CPFP <fa-icon [icon]="['fas', 'info-circle']" [fixedWidth]="true"></fa-icon></button>
+            <button type="button" class="btn btn-outline-info btn-sm btn-small-height float-right" (click)="toggleCpfp()">CPFP</button>
           }
         </td>
       </tr>
@@ -280,7 +280,7 @@
 <ng-template #acceleratingRow>
   <tr>
     <td rowspan="2" colspan="2" style="padding: 0;">
-      <app-active-acceleration-box [acceleratedBy]="tx.acceleratedBy" [effectiveFeeRate]="tx.effectiveFeePerVsize" [accelerationInfo]="accelerationInfo" [miningStats]="miningStats" [hasCpfp]="hasCpfp" (toggleCpfp)="showCpfpDetails = !showCpfpDetails" [chartPositionLeft]="isMobile"></app-active-acceleration-box>
+      <app-active-acceleration-box [acceleratedBy]="tx.acceleratedBy" [effectiveFeeRate]="tx.effectiveFeePerVsize" [accelerationInfo]="accelerationInfo" [miningStats]="miningStats" [hasCpfp]="hasCpfp" (toggleCpfp)="toggleCpfp()" [chartPositionLeft]="isMobile"></app-active-acceleration-box>
     </td>
   </tr>
   <tr></tr>

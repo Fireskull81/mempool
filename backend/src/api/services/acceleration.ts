@@ -46,8 +46,11 @@ class AccelerationApi {
   private websocketConnected: boolean = false;
   private onDemandPollingEnabled = !config.MEMPOOL_SERVICES.ACCELERATIONS;
   private apiPath = config.MEMPOOL.OFFICIAL ? (config.MEMPOOL_SERVICES.API + '/accelerator/accelerations') : (config.EXTERNAL_DATA_SERVER.MEMPOOL_API + '/accelerations');
+  private websocketPath = config.MEMPOOL_SERVICES?.API ? `${config.MEMPOOL_SERVICES.API.replace('https://', 'wss://').replace('http://', 'ws://')}/accelerator/ws` : '/';
   private _accelerations: Record<string, Acceleration> = {};
   private lastPoll = 0;
+  private lastPing = Date.now();
+  private lastPong = Date.now();
   private forcePoll = false;
   private myAccelerations: Record<string, { status: MyAccelerationStatus, added: number, acceleration?: Acceleration }> = {};
 
@@ -242,18 +245,18 @@ class AccelerationApi {
     while (this.useWebsocket) {
       this.startedWebsocketLoop = true;
       if (!this.ws) {
-        this.ws = new WebSocket(`${config.MEMPOOL_SERVICES.API.replace('https://', 'ws://').replace('http://', 'ws://')}/accelerator/ws`);
+        this.ws = new WebSocket(this.websocketPath);
         this.websocketConnected = true;
 
         this.ws.on('open', () => {
-          logger.info('Acceleration websocket opened');
+          logger.info(`Acceleration websocket opened to ${this.websocketPath}`);
           this.ws?.send(JSON.stringify({
             'watch-accelerations': true
           }));
         });
 
         this.ws.on('error', (error) => {
-          logger.err('Acceleration websocket error: ' + error);
+          logger.err(`Acceleration websocket error on ${this.websocketPath}: ` + error);
           this.ws = null;
           this.websocketConnected = false;
         });
@@ -266,12 +269,33 @@ class AccelerationApi {
 
         this.ws.on('message', (data, isBinary) => {
           try {
-            const parsedMsg = JSON.parse((isBinary ? data : data.toString()) as string);
+            const msg = (isBinary ? data : data.toString()) as string;
+            const parsedMsg = msg?.length ? JSON.parse(msg) : null;
             this.handleWebsocketMessage(parsedMsg);
           } catch (e) {
             logger.warn('Failed to parse acceleration websocket message: ' + (e instanceof Error ? e.message : e));
           }
         });
+
+        this.ws.on('ping', () => {
+          logger.debug('received ping from acceleration websocket server');
+        });
+
+        this.ws.on('pong', () => {
+          logger.debug('received pong from acceleration websocket server');
+          this.lastPong = Date.now();
+        });
+      } else {
+        if (this.lastPing > this.lastPong && Date.now() - this.lastPing > 10000) {
+          logger.warn('No pong received within 10 seconds, terminating connection');
+          this.ws.terminate();
+          this.ws = null;
+          this.websocketConnected = false;
+        } else if (Date.now() - this.lastPing > 30000) {
+          logger.debug('sending ping to acceleration websocket server');
+          this.ws.ping();
+          this.lastPing = Date.now();
+        }
       }
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
